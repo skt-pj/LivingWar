@@ -4,14 +4,14 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <title>LivingWar - 魔王軍プロトタイプ</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=gbfix2" />
 </head>
 <body>
   <main class="app-shell">
     <section class="screen-column">
       <div class="screen-frame" aria-label="Dungeon editor">
         <div class="canvas-viewport" id="canvasViewport">
-          <canvas id="game" width="640" height="512"></canvas>
+          <canvas id="game" width="160" height="144"></canvas>
         </div>
       </div>
       <div class="screen-toolbar">
@@ -79,11 +79,11 @@
           <button id="loadButton" class="menu-button compact" type="button">設計読込</button>
         </div>
 
-        <p class="note">ダンジョン製作は通常表示。ピンチ操作で拡大・縮小と位置調整ができます。バトル画面はGBモードで実装する前提です。</p>
+        <p class="note">ゲーム画面はGBモード。外側の操作UIは通常表示です。ピンチで拡大・縮小、ズーム後は1本指ドラッグで移動できます。</p>
       </div>
     </aside>
   </main>
 
-  <script src="game.js"></script>
+  <script src="game.js?v=gbfix2"></script>
 </body>
 </html>
