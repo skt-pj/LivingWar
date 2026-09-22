@@ -516,6 +516,10 @@ h1 {
   gap: 8px;
 }
 
+.terrain-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .tool-grid.two-column {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -594,6 +598,15 @@ h1 {
     linear-gradient(currentColor 0 0) 0 10px / 7px 3px,
     linear-gradient(currentColor 0 0) 8px 10px / 7px 3px;
   background-repeat: no-repeat;
+}
+
+.room-icon::before {
+  content: "";
+  width: 15px;
+  height: 15px;
+  border: 2px solid currentColor;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 3px #242a36;
 }
 
 .danger-tool .tool-icon,
@@ -1122,6 +1135,11 @@ h1 {
 
   .tool-button {
     min-height: 60px;
+  }
+
+  .terrain-grid .tool-button {
+    min-width: 0;
+    padding-inline: 4px;
   }
 
   .info-card {
