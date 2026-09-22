@@ -1,20 +1,41 @@
 (() => {
   "use strict";
 
-  const COLORS = {
+  const EDIT_COLORS = {
+    floor: "#d9c9ad",
+    floorAlt: "#cfb995",
+    grid: "#b7a587",
+    wall: "#5e6671",
+    wallTop: "#7a8491",
+    wallDark: "#3f4650",
+    entrance: "#2f6fc4",
+    entranceLight: "#9bc1f5",
+    stairs: "#d79d2b",
+    stairsDark: "#7d5712",
+    slime: "#49a85b",
+    slimeDark: "#226632",
+    goblin: "#b36b32",
+    goblinDark: "#653719",
+    trap: "#b63a3a",
+    trapDark: "#662020",
+    white: "#ffffff",
+    text: "#1f2937",
+  };
+
+  const GB_COLORS = {
     light: "#9BBC0F",
     lightMid: "#8BAC0F",
     darkMid: "#306230",
     dark: "#0F380F",
   };
 
-  const CANVAS_W = 160;
-  const CANVAS_H = 144;
-  const HUD_H = 16;
-  const TILE = 16;
-  const COLS = 10;
-  const ROWS = 8;
-  const SAVE_KEY = "livingwar:dungeon:v1";
+  const CANVAS_W = 640;
+  const CANVAS_H = 512;
+  const TILE = 32;
+  const COLS = 20;
+  const ROWS = 16;
+  const SAVE_KEY = "livingwar:dungeon:v2";
+  const MAX_ZOOM = 4;
 
   const MONSTER_DEFS = {
     slime: {
@@ -35,8 +56,10 @@
 
   const TOOL_INFO = {
     floor: "床\n歩行可能なマスです。",
-    wall: "壁\n移動不可。配置済みのモンスターと罠も消去します。",
-    erase: "消去\nモンスター・罠を消します。地形は床になります。",
+    wall: "壁\n移動不可。配置済みのモンスター・罠・設備も消去します。",
+    erase: "消去\nモンスター・罠・設備を消し、床に戻します。",
+    entrance: "入口\n勇者が1Fへ侵入する開始地点です。1Fに1か所だけ置けます。",
+    stairs: "次の階段\n次の階へ進む地点です。1Fに1か所だけ置けます。",
     slime: `スライム\nLv ${MONSTER_DEFS.slime.level}\nドロップ: ${MONSTER_DEFS.slime.drop}\n進化条件: ${MONSTER_DEFS.slime.evolution}\n行動: ${MONSTER_DEFS.slime.logic}`,
     goblin: `ゴブリン\nLv ${MONSTER_DEFS.goblin.level}\nドロップ: ${MONSTER_DEFS.goblin.drop}\n進化条件: ${MONSTER_DEFS.goblin.evolution}\n行動: ${MONSTER_DEFS.goblin.logic}`,
     trap: "トゲ罠\n床に設置できます。勇者への効果は勇者側実装時に接続します。",
@@ -44,6 +67,7 @@
 
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
+  const viewport = document.getElementById("canvasViewport");
   ctx.imageSmoothingEnabled = false;
 
   const startPanel = document.getElementById("startPanel");
@@ -55,6 +79,7 @@
   const resetButton = document.getElementById("resetButton");
   const saveButton = document.getElementById("saveButton");
   const loadButton = document.getElementById("loadButton");
+  const zoomResetButton = document.getElementById("zoomResetButton");
   const toolInfo = document.getElementById("toolInfo");
   const monsterCount = document.getElementById("monsterCount");
   const trapCount = document.getElementById("trapCount");
@@ -67,11 +92,22 @@
   let simulation = false;
   let lastStepAt = 0;
   let nextMonsterId = 1;
+  let suppressClickUntil = 0;
+
+  const view = {
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0,
+  };
+
+  let pinch = null;
 
   const state = {
     tiles: [],
     monsters: [],
     traps: [],
+    entrance: null,
+    stairs: null,
   };
 
   function makeInitialDungeon() {
@@ -83,6 +119,8 @@
     );
     state.monsters = [];
     state.traps = [];
+    state.entrance = { x: 1, y: 1 };
+    state.stairs = { x: COLS - 2, y: ROWS - 2 };
     nextMonsterId = 1;
     updateCounts();
   }
@@ -93,12 +131,16 @@
       simulation = false;
       startPanel.classList.remove("hidden");
       editorPanel.classList.add("hidden");
+      zoomResetButton.classList.add("hidden");
+      resetView();
       screenHelp.textContent = "軍勢を選択してください。";
       drawStartScreen();
     } else {
       startPanel.classList.add("hidden");
       editorPanel.classList.remove("hidden");
-      screenHelp.textContent = "マスをクリックしてダンジョンを編集。";
+      zoomResetButton.classList.remove("hidden");
+      resetView();
+      screenHelp.textContent = "マスをクリックして編集。2本指のピンチで拡大・縮小できます。";
       updateSimulationButton();
       drawDungeon();
     }
@@ -120,24 +162,35 @@
     simState.textContent = simulation ? "稼働" : "停止";
   }
 
-  function clearCanvas(color = COLORS.light) {
+  function clearCanvas(color) {
     ctx.fillStyle = color;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
   }
 
   function drawStartScreen() {
-    clearCanvas(COLORS.light);
-    pixelText("YUUSHA", 80, 26, 2, COLORS.dark, "center");
-    pixelText("VS", 80, 48, 2, COLORS.darkMid, "center");
-    pixelText("MAOU", 80, 70, 2, COLORS.dark, "center");
-    drawTinyCrown(72, 84);
-    pixelText("SELECT ARMY", 80, 116, 1, COLORS.dark, "center");
-    pixelText("MAOU READY", 80, 130, 1, COLORS.darkMid, "center");
+    const gradient = ctx.createLinearGradient(0, 0, CANVAS_W, CANVAS_H);
+    gradient.addColorStop(0, "#dfe8f5");
+    gradient.addColorStop(1, "#f4e8dc");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+    ctx.fillStyle = "#1f2937";
+    ctx.textAlign = "center";
+    ctx.font = "700 52px system-ui, sans-serif";
+    ctx.fillText("LivingWar", CANVAS_W / 2, 190);
+
+    ctx.fillStyle = "#667085";
+    ctx.font = "24px system-ui, sans-serif";
+    ctx.fillText("勇者軍 vs 魔王軍", CANVAS_W / 2, 242);
+
+    ctx.fillStyle = "#3157d5";
+    ctx.font = "700 22px system-ui, sans-serif";
+    ctx.fillText("魔王軍プロトタイプ", CANVAS_W / 2, 318);
+    ctx.textAlign = "start";
   }
 
   function drawDungeon() {
-    clearCanvas(COLORS.lightMid);
-    drawHud();
+    clearCanvas(EDIT_COLORS.floor);
 
     for (let y = 0; y < ROWS; y++) {
       for (let x = 0; x < COLS; x++) {
@@ -145,159 +198,146 @@
       }
     }
 
+    if (state.entrance) drawEntrance(state.entrance);
+    if (state.stairs) drawStairs(state.stairs);
     state.traps.forEach(drawTrap);
     state.monsters.forEach(drawMonster);
   }
 
-  function drawHud() {
-    ctx.fillStyle = COLORS.dark;
-    ctx.fillRect(0, 0, CANVAS_W, HUD_H);
-    pixelText("MAOU 1F", 4, 4, 1, COLORS.light, "left");
-    pixelText(simulation ? "RUN" : "EDIT", 156, 4, 1, COLORS.light, "right");
-  }
-
   function drawTile(x, y, type) {
     const px = x * TILE;
-    const py = HUD_H + y * TILE;
+    const py = y * TILE;
 
     if (type === "wall") {
-      ctx.fillStyle = COLORS.darkMid;
+      ctx.fillStyle = EDIT_COLORS.wall;
       ctx.fillRect(px, py, TILE, TILE);
-      ctx.fillStyle = COLORS.dark;
-      ctx.fillRect(px, py, TILE, 3);
-      ctx.fillRect(px, py, 3, TILE);
-      ctx.fillStyle = COLORS.lightMid;
-      ctx.fillRect(px + 4, py + 5, 8, 3);
-      ctx.fillRect(px + 8, py + 10, 8, 3);
+      ctx.fillStyle = EDIT_COLORS.wallTop;
+      ctx.fillRect(px + 2, py + 2, TILE - 4, 7);
+      ctx.fillStyle = EDIT_COLORS.wallDark;
+      ctx.fillRect(px + 2, py + TILE - 6, TILE - 4, 4);
+      ctx.fillRect(px + 2, py + 12, 10, 2);
+      ctx.fillRect(px + 18, py + 19, 11, 2);
     } else {
-      ctx.fillStyle = COLORS.light;
+      ctx.fillStyle = (x + y) % 2 === 0 ? EDIT_COLORS.floor : EDIT_COLORS.floorAlt;
       ctx.fillRect(px, py, TILE, TILE);
-      ctx.fillStyle = COLORS.lightMid;
-      ctx.fillRect(px + 2, py + 3, 2, 2);
-      ctx.fillRect(px + 11, py + 10, 2, 2);
+      ctx.fillStyle = "rgba(80, 65, 45, .12)";
+      ctx.fillRect(px + 6, py + 7, 3, 3);
+      ctx.fillRect(px + 22, py + 21, 3, 3);
     }
 
-    ctx.strokeStyle = COLORS.darkMid;
+    ctx.strokeStyle = EDIT_COLORS.grid;
     ctx.lineWidth = 1;
     ctx.strokeRect(px + 0.5, py + 0.5, TILE - 1, TILE - 1);
   }
 
+  function drawEntrance(point) {
+    const px = point.x * TILE;
+    const py = point.y * TILE;
+    ctx.fillStyle = EDIT_COLORS.entrance;
+    ctx.fillRect(px + 6, py + 5, 20, 22);
+    ctx.fillStyle = EDIT_COLORS.entranceLight;
+    ctx.fillRect(px + 10, py + 9, 12, 18);
+    ctx.fillStyle = EDIT_COLORS.white;
+    ctx.beginPath();
+    ctx.moveTo(px + 12, py + 18);
+    ctx.lineTo(px + 20, py + 13);
+    ctx.lineTo(px + 20, py + 23);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawStairs(point) {
+    const px = point.x * TILE;
+    const py = point.y * TILE;
+    ctx.fillStyle = EDIT_COLORS.stairsDark;
+    ctx.fillRect(px + 5, py + 7, 22, 20);
+    ctx.fillStyle = EDIT_COLORS.stairs;
+    for (let i = 0; i < 4; i++) {
+      ctx.fillRect(px + 7 + i * 3, py + 22 - i * 4, 18 - i * 3, 3);
+    }
+  }
+
   function drawTrap(trap) {
     const px = trap.x * TILE;
-    const py = HUD_H + trap.y * TILE;
-    ctx.fillStyle = COLORS.darkMid;
-    ctx.fillRect(px + 3, py + 11, 10, 2);
-    ctx.fillStyle = COLORS.dark;
-    for (let i = 0; i < 3; i++) {
-      const bx = px + 3 + i * 4;
+    const py = trap.y * TILE;
+    ctx.fillStyle = EDIT_COLORS.trapDark;
+    ctx.fillRect(px + 5, py + 24, 22, 3);
+    ctx.fillStyle = EDIT_COLORS.trap;
+    for (let i = 0; i < 4; i++) {
+      const bx = px + 5 + i * 6;
       ctx.beginPath();
-      ctx.moveTo(bx, py + 11);
-      ctx.lineTo(bx + 2, py + 5);
-      ctx.lineTo(bx + 4, py + 11);
+      ctx.moveTo(bx, py + 24);
+      ctx.lineTo(bx + 3, py + 12);
+      ctx.lineTo(bx + 6, py + 24);
+      ctx.closePath();
       ctx.fill();
     }
   }
 
   function drawMonster(monster) {
     const px = monster.x * TILE;
-    const py = HUD_H + monster.y * TILE;
+    const py = monster.y * TILE;
     if (monster.type === "slime") drawSlime(px, py);
     if (monster.type === "goblin") drawGoblin(px, py);
   }
 
   function drawSlime(px, py) {
-    ctx.fillStyle = COLORS.dark;
-    ctx.fillRect(px + 5, py + 5, 6, 2);
-    ctx.fillRect(px + 3, py + 7, 10, 5);
-    ctx.fillRect(px + 5, py + 12, 2, 2);
-    ctx.fillRect(px + 9, py + 12, 2, 2);
-    ctx.fillStyle = COLORS.light;
-    ctx.fillRect(px + 5, py + 8, 2, 2);
-    ctx.fillRect(px + 9, py + 8, 2, 2);
+    ctx.fillStyle = EDIT_COLORS.slimeDark;
+    ctx.beginPath();
+    ctx.arc(px + 16, py + 18, 11, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(px + 7, py + 17, 18, 9);
+
+    ctx.fillStyle = EDIT_COLORS.slime;
+    ctx.beginPath();
+    ctx.arc(px + 16, py + 17, 8, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = EDIT_COLORS.white;
+    ctx.fillRect(px + 11, py + 15, 4, 4);
+    ctx.fillRect(px + 18, py + 15, 4, 4);
   }
 
   function drawGoblin(px, py) {
-    ctx.fillStyle = COLORS.dark;
-    ctx.fillRect(px + 5, py + 3, 6, 2);
-    ctx.fillRect(px + 3, py + 5, 10, 7);
-    ctx.fillRect(px + 4, py + 12, 3, 2);
-    ctx.fillRect(px + 9, py + 12, 3, 2);
-    ctx.fillRect(px + 2, py + 6, 2, 3);
-    ctx.fillRect(px + 12, py + 6, 2, 3);
-    ctx.fillStyle = COLORS.light;
-    ctx.fillRect(px + 5, py + 7, 2, 2);
-    ctx.fillRect(px + 9, py + 7, 2, 2);
-    ctx.fillStyle = COLORS.lightMid;
-    ctx.fillRect(px + 7, py + 10, 2, 2);
-  }
+    ctx.fillStyle = EDIT_COLORS.goblinDark;
+    ctx.fillRect(px + 8, py + 7, 16, 19);
+    ctx.fillRect(px + 4, py + 11, 6, 7);
+    ctx.fillRect(px + 22, py + 11, 6, 7);
 
-  function drawTinyCrown(x, y) {
-    ctx.fillStyle = COLORS.dark;
-    ctx.fillRect(x, y + 8, 16, 5);
-    ctx.fillRect(x + 1, y + 4, 3, 5);
-    ctx.fillRect(x + 6, y + 1, 4, 8);
-    ctx.fillRect(x + 12, y + 4, 3, 5);
-  }
+    ctx.fillStyle = EDIT_COLORS.goblin;
+    ctx.fillRect(px + 10, py + 9, 12, 15);
 
-  const FONT = {
-    A:["01110","10001","10001","11111","10001","10001","10001"],
-    C:["01111","10000","10000","10000","10000","10000","01111"],
-    D:["11110","10001","10001","10001","10001","10001","11110"],
-    E:["11111","10000","10000","11110","10000","10000","11111"],
-    F:["11111","10000","10000","11110","10000","10000","10000"],
-    H:["10001","10001","10001","11111","10001","10001","10001"],
-    I:["11111","00100","00100","00100","00100","00100","11111"],
-    L:["10000","10000","10000","10000","10000","10000","11111"],
-    M:["10001","11011","10101","10101","10001","10001","10001"],
-    N:["10001","11001","11001","10101","10011","10011","10001"],
-    O:["01110","10001","10001","10001","10001","10001","01110"],
-    R:["11110","10001","10001","11110","10100","10010","10001"],
-    S:["01111","10000","10000","01110","00001","00001","11110"],
-    T:["11111","00100","00100","00100","00100","00100","00100"],
-    U:["10001","10001","10001","10001","10001","10001","01110"],
-    V:["10001","10001","10001","10001","01010","01010","00100"],
-    Y:["10001","10001","01010","00100","00100","00100","00100"],
-    "1":["00100","01100","00100","00100","00100","00100","01110"],
-    " ":["00000","00000","00000","00000","00000","00000","00000"],
-  };
-
-  function pixelText(text, x, y, scale, color, align = "left") {
-    const chars = [...text.toUpperCase()];
-    const glyphW = 5 * scale;
-    const gap = scale;
-    const width = chars.length * (glyphW + gap) - gap;
-    let cursor = x;
-    if (align === "center") cursor -= Math.floor(width / 2);
-    if (align === "right") cursor -= width;
-    ctx.fillStyle = color;
-
-    for (const ch of chars) {
-      const glyph = FONT[ch] || FONT[" "];
-      for (let row = 0; row < 7; row++) {
-        for (let col = 0; col < 5; col++) {
-          if (glyph[row][col] === "1") {
-            ctx.fillRect(cursor + col * scale, y + row * scale, scale, scale);
-          }
-        }
-      }
-      cursor += glyphW + gap;
-    }
+    ctx.fillStyle = EDIT_COLORS.white;
+    ctx.fillRect(px + 11, py + 13, 4, 4);
+    ctx.fillRect(px + 18, py + 13, 4, 4);
   }
 
   function canvasToTile(event) {
-    const rect = canvas.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * CANVAS_W;
-    const y = ((event.clientY - rect.top) / rect.height) * CANVAS_H;
-    if (y < HUD_H) return null;
-    const tileX = Math.floor(x / TILE);
-    const tileY = Math.floor((y - HUD_H) / TILE);
+    const rect = viewport.getBoundingClientRect();
+    const localX = (event.clientX - rect.left - view.offsetX) / view.scale;
+    const localY = (event.clientY - rect.top - view.offsetY) / view.scale;
+    const logicalX = (localX / rect.width) * CANVAS_W;
+    const logicalY = (localY / rect.height) * CANVAS_H;
+    const tileX = Math.floor(logicalX / TILE);
+    const tileY = Math.floor(logicalY / TILE);
+
     if (tileX < 0 || tileX >= COLS || tileY < 0 || tileY >= ROWS) return null;
     return { x: tileX, y: tileY };
+  }
+
+  function samePoint(point, x, y) {
+    return point && point.x === x && point.y === y;
   }
 
   function removeEntitiesAt(x, y) {
     state.monsters = state.monsters.filter((m) => !(m.x === x && m.y === y));
     state.traps = state.traps.filter((t) => !(t.x === x && t.y === y));
+    if (samePoint(state.entrance, x, y)) state.entrance = null;
+    if (samePoint(state.stairs, x, y)) state.stairs = null;
+  }
+
+  function isAnchorAt(x, y) {
+    return samePoint(state.entrance, x, y) || samePoint(state.stairs, x, y);
   }
 
   function placeAt(x, y) {
@@ -311,12 +351,24 @@
     } else if (selectedTool === "erase") {
       state.tiles[y][x] = "floor";
       removeEntitiesAt(x, y);
-    } else if (selectedTool === "trap") {
+    } else if (selectedTool === "entrance") {
       if (state.tiles[y][x] !== "floor") return;
+      state.entrance = { x, y };
+      if (samePoint(state.stairs, x, y)) state.stairs = null;
+      state.monsters = state.monsters.filter((m) => !(m.x === x && m.y === y));
+      state.traps = state.traps.filter((t) => !(t.x === x && t.y === y));
+    } else if (selectedTool === "stairs") {
+      if (state.tiles[y][x] !== "floor") return;
+      state.stairs = { x, y };
+      if (samePoint(state.entrance, x, y)) state.entrance = null;
+      state.monsters = state.monsters.filter((m) => !(m.x === x && m.y === y));
+      state.traps = state.traps.filter((t) => !(t.x === x && t.y === y));
+    } else if (selectedTool === "trap") {
+      if (state.tiles[y][x] !== "floor" || isAnchorAt(x, y)) return;
       state.traps = state.traps.filter((t) => !(t.x === x && t.y === y));
       state.traps.push({ x, y, type: "spike" });
     } else if (selectedTool === "slime" || selectedTool === "goblin") {
-      if (state.tiles[y][x] !== "floor") return;
+      if (state.tiles[y][x] !== "floor" || isAnchorAt(x, y)) return;
       state.monsters = state.monsters.filter((m) => !(m.x === x && m.y === y));
       state.monsters.push({
         id: nextMonsterId++,
@@ -385,10 +437,14 @@
 
   function saveDungeon() {
     const data = {
-      version: 1,
+      version: 2,
+      cols: COLS,
+      rows: ROWS,
       tiles: state.tiles,
       monsters: state.monsters,
       traps: state.traps,
+      entrance: state.entrance,
+      stairs: state.stairs,
       nextMonsterId,
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -404,20 +460,122 @@
 
     try {
       const data = JSON.parse(raw);
-      if (!Array.isArray(data.tiles) || data.tiles.length !== ROWS) throw new Error("invalid tiles");
+      if (
+        data.version !== 2 ||
+        data.cols !== COLS ||
+        data.rows !== ROWS ||
+        !Array.isArray(data.tiles) ||
+        data.tiles.length !== ROWS
+      ) {
+        throw new Error("invalid dungeon");
+      }
+
       state.tiles = data.tiles;
       state.monsters = Array.isArray(data.monsters) ? data.monsters : [];
       state.traps = Array.isArray(data.traps) ? data.traps : [];
+      state.entrance = data.entrance || null;
+      state.stairs = data.stairs || null;
       nextMonsterId = Number.isInteger(data.nextMonsterId) ? data.nextMonsterId : state.monsters.length + 1;
+
       simulation = false;
       updateSimulationButton();
       updateCounts();
+      resetView();
       drawDungeon();
       screenHelp.textContent = "保存した1Fを読み込みました。";
     } catch {
       screenHelp.textContent = "保存データを読み込めませんでした。";
     }
   }
+
+  function applyViewTransform() {
+    canvas.style.transform = `translate(${view.offsetX}px, ${view.offsetY}px) scale(${view.scale})`;
+  }
+
+  function clampView() {
+    const rect = viewport.getBoundingClientRect();
+    const minX = rect.width - rect.width * view.scale;
+    const minY = rect.height - rect.height * view.scale;
+    view.offsetX = Math.min(0, Math.max(minX, view.offsetX));
+    view.offsetY = Math.min(0, Math.max(minY, view.offsetY));
+  }
+
+  function resetView() {
+    view.scale = 1;
+    view.offsetX = 0;
+    view.offsetY = 0;
+    applyViewTransform();
+  }
+
+  function touchDistance(touchA, touchB) {
+    return Math.hypot(touchB.clientX - touchA.clientX, touchB.clientY - touchA.clientY);
+  }
+
+  function touchMidpoint(touchA, touchB, rect) {
+    return {
+      x: ((touchA.clientX + touchB.clientX) / 2) - rect.left,
+      y: ((touchA.clientY + touchB.clientY) / 2) - rect.top,
+    };
+  }
+
+  viewport.addEventListener("touchstart", (event) => {
+    if (mode !== "editor" || event.touches.length !== 2) return;
+
+    event.preventDefault();
+    const rect = viewport.getBoundingClientRect();
+    const mid = touchMidpoint(event.touches[0], event.touches[1], rect);
+    pinch = {
+      startDistance: touchDistance(event.touches[0], event.touches[1]),
+      startScale: view.scale,
+      worldX: (mid.x - view.offsetX) / view.scale,
+      worldY: (mid.y - view.offsetY) / view.scale,
+    };
+    suppressClickUntil = Date.now() + 350;
+  }, { passive: false });
+
+  viewport.addEventListener("touchmove", (event) => {
+    if (mode !== "editor" || event.touches.length !== 2 || !pinch) return;
+
+    event.preventDefault();
+    const rect = viewport.getBoundingClientRect();
+    const mid = touchMidpoint(event.touches[0], event.touches[1], rect);
+    const distance = touchDistance(event.touches[0], event.touches[1]);
+    const nextScale = Math.max(1, Math.min(MAX_ZOOM, pinch.startScale * (distance / pinch.startDistance)));
+
+    view.scale = nextScale;
+    view.offsetX = mid.x - pinch.worldX * nextScale;
+    view.offsetY = mid.y - pinch.worldY * nextScale;
+    clampView();
+    applyViewTransform();
+    suppressClickUntil = Date.now() + 350;
+  }, { passive: false });
+
+  viewport.addEventListener("touchend", (event) => {
+    if (event.touches.length < 2) {
+      pinch = null;
+      suppressClickUntil = Date.now() + 250;
+    }
+  }, { passive: true });
+
+  viewport.addEventListener("wheel", (event) => {
+    if (mode !== "editor" || !event.ctrlKey) return;
+
+    event.preventDefault();
+    const rect = viewport.getBoundingClientRect();
+    const pointX = event.clientX - rect.left;
+    const pointY = event.clientY - rect.top;
+    const worldX = (pointX - view.offsetX) / view.scale;
+    const worldY = (pointY - view.offsetY) / view.scale;
+    const factor = Math.exp(-event.deltaY * 0.01);
+    const nextScale = Math.max(1, Math.min(MAX_ZOOM, view.scale * factor));
+
+    view.scale = nextScale;
+    view.offsetX = pointX - worldX * nextScale;
+    view.offsetY = pointY - worldY * nextScale;
+    clampView();
+    applyViewTransform();
+    suppressClickUntil = Date.now() + 120;
+  }, { passive: false });
 
   heroButton.addEventListener("click", () => {
     screenHelp.textContent = "勇者軍は次段階で実装します。";
@@ -434,7 +592,7 @@
   });
 
   canvas.addEventListener("click", (event) => {
-    if (mode !== "editor") return;
+    if (mode !== "editor" || Date.now() < suppressClickUntil) return;
     const tile = canvasToTile(event);
     if (tile) placeAt(tile.x, tile.y);
   });
@@ -452,15 +610,28 @@
     simulation = false;
     updateSimulationButton();
     makeInitialDungeon();
+    resetView();
     drawDungeon();
     screenHelp.textContent = "1Fを初期状態に戻しました。";
   });
 
   saveButton.addEventListener("click", saveDungeon);
   loadButton.addEventListener("click", loadDungeon);
+  zoomResetButton.addEventListener("click", resetView);
+
+  window.addEventListener("resize", () => {
+    clampView();
+    applyViewTransform();
+  });
 
   makeInitialDungeon();
   setTool("floor");
   setMode("start");
   requestAnimationFrame(loop);
+
+  window.LivingWarBattleTheme = Object.freeze({
+    width: 160,
+    height: 144,
+    colors: Object.freeze(GB_COLORS),
+  });
 })();
