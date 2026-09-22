@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <meta name="theme-color" content="#0b0d12" />
   <title>LivingWar - 魔王軍ダンジョン製作</title>
-  <link rel="stylesheet" href="styles.css?v=modern10" />
+  <link rel="stylesheet" href="styles.css?v=rooms12" />
 </head>
 <body>
   <main class="app-shell">
@@ -159,6 +159,14 @@
 
         <div class="info-card" id="toolInfo"></div>
 
+        <section class="message-window" aria-label="メッセージ履歴">
+          <div class="message-window-head">
+            <span>メッセージ</span>
+            <small>MESSAGE LOG</small>
+          </div>
+          <div class="message-log" id="messageLog" role="log" aria-live="polite" aria-relevant="additions"></div>
+        </section>
+
         <div class="primary-actions">
           <button id="simulateButton" class="game-action primary" type="button">
             <span aria-hidden="true">▶</span>
@@ -182,6 +190,6 @@
     </aside>
   </main>
 
-  <script src="game.js?v=offset11"></script>
+  <script src="game.js?v=rooms12"></script>
 </body>
 </html>
