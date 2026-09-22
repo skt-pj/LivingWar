@@ -375,6 +375,47 @@ h1 {
   font-size: 20px;
 }
 
+.editor-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editor-menu {
+  position: absolute;
+  top: calc(100% - 6px);
+  right: 22px;
+  z-index: 8;
+  min-width: 150px;
+  padding: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: rgba(18, 22, 30, .98);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, .36);
+  backdrop-filter: blur(12px);
+}
+
+.editor-menu-item {
+  width: 100%;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+
+.editor-menu-item:active {
+  background: var(--panel-3);
+}
+
 .icon-button,
 .small-button,
 .game-action,
@@ -669,6 +710,57 @@ h1 {
 .message-text {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.history-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(5, 7, 11, .72);
+  backdrop-filter: blur(8px);
+}
+
+.history-dialog {
+  width: min(520px, 100%);
+  max-height: min(720px, calc(100dvh - 40px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .52);
+}
+
+.history-dialog-head {
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 14px 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.history-dialog-head .eyebrow {
+  margin-bottom: 3px;
+}
+
+.history-dialog-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.history-message-log {
+  width: 100%;
+  height: auto;
+  min-height: 260px;
+  max-height: min(560px, calc(100dvh - 130px));
+  flex: 1;
+  padding: 7px 0;
 }
 
 .primary-actions {
@@ -999,6 +1091,10 @@ h1 {
     padding: 13px 16px 11px;
   }
 
+  .editor-menu {
+    right: 16px;
+  }
+
   .editor-topbar h1 {
     font-size: 18px;
   }
@@ -1033,12 +1129,28 @@ h1 {
     margin-top: 16px;
   }
 
-  .message-window {
-    margin-top: 12px;
-  }
-
   .message-log {
     height: 104px;
+  }
+
+  .history-overlay {
+    align-items: end;
+    padding: 0;
+  }
+
+  .history-dialog {
+    width: 100%;
+    max-height: 72dvh;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .history-message-log {
+    height: auto;
+    min-height: 220px;
+    max-height: calc(72dvh - 66px);
   }
 
   .primary-actions {
