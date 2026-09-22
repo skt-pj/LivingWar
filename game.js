@@ -127,6 +127,7 @@
       resetView();
       screenHelp.textContent = "マスをクリックして編集。2本指のピンチで拡大・縮小できます。";
       updateSimulationButton();
+      enforceValidDungeonRoute();
       drawDungeon();
     }
   }
@@ -381,6 +382,67 @@
     screenHelp.textContent = "入口から出口への通路が塞がるため、その配置はできません。";
   }
 
+  function repairEntranceToExitPath() {
+    if (!state.entrance || !state.stairs) return false;
+    if (hasEntranceToExitPath()) return false;
+
+    const start = state.entrance;
+    const goal = state.stairs;
+    const dist = Array.from({ length: ROWS }, () => Array(COLS).fill(Infinity));
+    const prev = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+    const deque = [{ x: start.x, y: start.y }];
+    dist[start.y][start.x] = 0;
+
+    while (deque.length > 0) {
+      const current = deque.shift();
+      if (current.x === goal.x && current.y === goal.y) break;
+
+      for (const dir of DIRS) {
+        const nx = current.x + dir.x;
+        const ny = current.y + dir.y;
+        if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) continue;
+
+        const cost = state.tiles[ny][nx] === "wall" ? 1 : 0;
+        const nextDist = dist[current.y][current.x] + cost;
+        if (nextDist >= dist[ny][nx]) continue;
+
+        dist[ny][nx] = nextDist;
+        prev[ny][nx] = current;
+
+        if (cost === 0) {
+          deque.unshift({ x: nx, y: ny });
+        } else {
+          deque.push({ x: nx, y: ny });
+        }
+      }
+    }
+
+    if (!Number.isFinite(dist[goal.y][goal.x])) return false;
+
+    let cursor = { x: goal.x, y: goal.y };
+    while (!(cursor.x === start.x && cursor.y === start.y)) {
+      state.tiles[cursor.y][cursor.x] = "floor";
+      const previous = prev[cursor.y][cursor.x];
+      if (!previous) break;
+      cursor = previous;
+    }
+
+    state.tiles[start.y][start.x] = "floor";
+    state.tiles[goal.y][goal.x] = "floor";
+    return true;
+  }
+
+  function enforceValidDungeonRoute() {
+    if (hasEntranceToExitPath()) return false;
+
+    const repaired = repairEntranceToExitPath();
+    if (repaired) {
+      screenHelp.textContent = "入口から出口への経路が塞がれていたため、最小限の壁を床に戻しました。";
+      drawDungeon();
+    }
+    return repaired;
+  }
+
   function placeAt(x, y) {
     if (simulation) return;
 
@@ -447,6 +509,7 @@
       });
     }
 
+    enforceValidDungeonRoute();
     updateCounts();
     drawDungeon();
   }
@@ -538,7 +601,7 @@
       nextMonsterId = Number.isInteger(data.nextMonsterId) ? data.nextMonsterId : state.monsters.length + 1;
 
       if (!hasEntranceToExitPath()) {
-        throw new Error("blocked entrance-to-exit route");
+        repairEntranceToExitPath();
       }
 
       simulation = false;
