@@ -82,6 +82,7 @@ button { font: inherit; }
   transform-origin: 0 0;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
   cursor: crosshair;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
