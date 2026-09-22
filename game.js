@@ -61,6 +61,11 @@
   const heroButton = document.getElementById("heroButton");
   const maouButton = document.getElementById("maouButton");
   const backButton = document.getElementById("backButton");
+  const menuButton = document.getElementById("menuButton");
+  const editorMenu = document.getElementById("editorMenu");
+  const openHistoryButton = document.getElementById("openHistoryButton");
+  const historyPanel = document.getElementById("historyPanel");
+  const closeHistoryButton = document.getElementById("closeHistoryButton");
   const simulateButton = document.getElementById("simulateButton");
   const resetButton = document.getElementById("resetButton");
   const saveButton = document.getElementById("saveButton");
@@ -132,6 +137,8 @@
     mode = next;
     if (mode === "start") {
       simulation = false;
+      closeEditorMenu();
+      historyPanel.classList.add("hidden");
       startPanel.classList.remove("hidden");
       editorPanel.classList.add("hidden");
       zoomResetButton.classList.add("hidden");
@@ -201,6 +208,31 @@
     nextMessageId = 1;
     lastMessageText = "";
     lastMessageAt = 0;
+  }
+
+  function closeEditorMenu() {
+    editorMenu.classList.add("hidden");
+    menuButton.setAttribute("aria-expanded", "false");
+  }
+
+  function toggleEditorMenu() {
+    const willOpen = editorMenu.classList.contains("hidden");
+    editorMenu.classList.toggle("hidden", !willOpen);
+    menuButton.setAttribute("aria-expanded", String(willOpen));
+  }
+
+  function openHistoryPanel() {
+    closeEditorMenu();
+    historyPanel.classList.remove("hidden");
+    requestAnimationFrame(() => {
+      messageLog.scrollTop = messageLog.scrollHeight;
+      closeHistoryButton.focus();
+    });
+  }
+
+  function closeHistoryPanel() {
+    historyPanel.classList.add("hidden");
+    menuButton.focus();
   }
 
   function updateSimulationButton() {
@@ -1463,6 +1495,32 @@
   });
 
   backButton.addEventListener("click", () => setMode("start"));
+
+  menuButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleEditorMenu();
+  });
+
+  editorMenu.addEventListener("click", (event) => {
+    event.stopPropagation();
+  });
+
+  openHistoryButton.addEventListener("click", openHistoryPanel);
+  closeHistoryButton.addEventListener("click", closeHistoryPanel);
+
+  historyPanel.addEventListener("click", (event) => {
+    if (event.target === historyPanel) closeHistoryPanel();
+  });
+
+  document.addEventListener("click", closeEditorMenu);
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (!historyPanel.classList.contains("hidden")) {
+      closeHistoryPanel();
+      return;
+    }
+    closeEditorMenu();
+  });
 
   toolButtons.forEach((button) => {
     button.addEventListener("click", () => setTool(button.dataset.tool));
