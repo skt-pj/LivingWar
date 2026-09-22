@@ -3,83 +3,181 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-  <title>LivingWar - 魔王軍プロトタイプ</title>
-  <link rel="stylesheet" href="styles.css?v=paint6" />
+  <meta name="theme-color" content="#0b0d12" />
+  <title>LivingWar - 魔王軍ダンジョン製作</title>
+  <link rel="stylesheet" href="styles.css?v=modern10" />
 </head>
 <body>
   <main class="app-shell">
     <section class="screen-column">
+      <header class="game-header">
+        <div class="brand-lockup">
+          <span class="brand-mark">LW</span>
+          <div>
+            <strong>LivingWar</strong>
+            <span>Dungeon Architect</span>
+          </div>
+        </div>
+        <div class="floor-badge">魔王軍 · 1F</div>
+      </header>
+
       <div class="screen-frame" aria-label="Dungeon editor">
-        <div class="canvas-viewport" id="canvasViewport">
-          <canvas id="game" width="160" height="144"></canvas>
+        <div class="screen-bezel">
+          <div class="canvas-viewport" id="canvasViewport">
+            <canvas id="game" width="160" height="144"></canvas>
+          </div>
         </div>
       </div>
+
       <div class="screen-toolbar">
         <div class="screen-help" id="screenHelp">軍勢を選択してください。</div>
-        <button id="zoomResetButton" class="small-button hidden" type="button">表示を戻す</button>
+        <button id="zoomResetButton" class="small-button hidden" type="button">
+          <span aria-hidden="true">⌖</span>
+          表示を戻す
+        </button>
       </div>
     </section>
 
     <aside class="panel" id="panel">
-      <div id="startPanel" class="panel-section">
-        <h1>LivingWar</h1>
-        <p>軍勢を選択</p>
-        <button class="menu-button disabled" id="heroButton" type="button">勇者軍</button>
-        <button class="menu-button primary" id="maouButton" type="button">魔王軍</button>
-        <p class="note">今回は魔王軍のみ実装。</p>
+      <div id="startPanel" class="panel-section start-panel">
+        <div class="eyebrow">SELECT FACTION</div>
+        <h1>どちらの軍勢で始める？</h1>
+        <p class="lead">世界を動かす側を選択してください。</p>
+
+        <div class="faction-list">
+          <button class="faction-card disabled" id="heroButton" type="button">
+            <span class="faction-icon hero-icon" aria-hidden="true">⚔</span>
+            <span class="faction-copy">
+              <strong>勇者軍</strong>
+              <small>自動攻略・冒険者運用</small>
+            </span>
+            <span class="coming-soon">準備中</span>
+          </button>
+
+          <button class="faction-card primary" id="maouButton" type="button">
+            <span class="faction-icon" aria-hidden="true">♜</span>
+            <span class="faction-copy">
+              <strong>魔王軍</strong>
+              <small>ダンジョンを設計して迎え撃つ</small>
+            </span>
+            <span class="faction-arrow" aria-hidden="true">›</span>
+          </button>
+        </div>
       </div>
 
-      <div id="editorPanel" class="panel-section hidden">
-        <div class="panel-head">
+      <div id="editorPanel" class="panel-section editor-panel hidden">
+        <div class="editor-topbar">
           <div>
+            <div class="eyebrow">DUNGEON BUILD</div>
             <h1>ダンジョン製作</h1>
-            <p>1F / 20×16マス</p>
           </div>
-          <button id="backButton" class="small-button" type="button">戻る</button>
+          <button id="backButton" class="icon-button" type="button" aria-label="軍勢選択へ戻る">←</button>
         </div>
 
-        <div class="status-grid">
-          <span>配置モンスター</span><strong id="monsterCount">0</strong>
-          <span>配置罠</span><strong id="trapCount">0</strong>
-          <span>シミュレーション</span><strong id="simState">停止</strong>
+        <div class="status-strip" aria-label="ダンジョン状態">
+          <div class="status-item">
+            <span>MONSTER</span>
+            <strong id="monsterCount">0</strong>
+          </div>
+          <div class="status-item">
+            <span>TRAP</span>
+            <strong id="trapCount">0</strong>
+          </div>
+          <div class="status-item wide">
+            <span>SIM</span>
+            <strong id="simState">停止</strong>
+          </div>
         </div>
 
-        <h2>地形</h2>
-        <div class="tool-grid">
-          <button class="tool-button active" data-tool="floor" type="button">床</button>
-          <button class="tool-button" data-tool="wall" type="button">壁</button>
-          <button class="tool-button" data-tool="erase" type="button">消去</button>
-        </div>
+        <section class="tool-section">
+          <div class="section-title">
+            <span>地形</span>
+            <small>TERRAIN</small>
+          </div>
+          <div class="tool-grid">
+            <button class="tool-button active" data-tool="floor" type="button">
+              <span class="tool-icon floor-icon" aria-hidden="true"></span>
+              <span>床</span>
+            </button>
+            <button class="tool-button" data-tool="wall" type="button">
+              <span class="tool-icon wall-icon" aria-hidden="true"></span>
+              <span>壁</span>
+            </button>
+            <button class="tool-button danger-tool" data-tool="erase" type="button">
+              <span class="tool-icon erase-icon" aria-hidden="true">×</span>
+              <span>消去</span>
+            </button>
+          </div>
+        </section>
 
-        <h2>設備</h2>
-        <div class="tool-grid two-column">
-          <button class="tool-button" data-tool="entrance" type="button">入口</button>
-          <button class="tool-button" data-tool="stairs" type="button">次の階段</button>
-        </div>
+        <section class="tool-section">
+          <div class="section-title">
+            <span>設備</span>
+            <small>FACILITY</small>
+          </div>
+          <div class="tool-grid two-column">
+            <button class="tool-button" data-tool="entrance" type="button">
+              <span class="tool-icon entrance-icon" aria-hidden="true">⇥</span>
+              <span>入口</span>
+            </button>
+            <button class="tool-button" data-tool="stairs" type="button">
+              <span class="tool-icon stairs-icon" aria-hidden="true">⇲</span>
+              <span>次の階段</span>
+            </button>
+          </div>
+        </section>
 
-        <h2>モンスター</h2>
-        <div class="tool-grid two-column">
-          <button class="tool-button" data-tool="slime" type="button">スライム</button>
-          <button class="tool-button" data-tool="goblin" type="button">ゴブリン</button>
-        </div>
+        <section class="tool-section">
+          <div class="section-title">
+            <span>モンスター</span>
+            <small>MONSTER</small>
+          </div>
+          <div class="tool-grid two-column">
+            <button class="tool-button creature-tool" data-tool="slime" type="button">
+              <span class="tool-icon slime-icon" aria-hidden="true">●</span>
+              <span>スライム</span>
+            </button>
+            <button class="tool-button creature-tool" data-tool="goblin" type="button">
+              <span class="tool-icon goblin-icon" aria-hidden="true">◆</span>
+              <span>ゴブリン</span>
+            </button>
+          </div>
+        </section>
 
-        <h2>罠</h2>
-        <div class="tool-grid one-column">
-          <button class="tool-button" data-tool="trap" type="button">トゲ罠</button>
-        </div>
+        <section class="tool-section">
+          <div class="section-title">
+            <span>罠</span>
+            <small>TRAP</small>
+          </div>
+          <div class="tool-grid one-column">
+            <button class="tool-button trap-tool" data-tool="trap" type="button">
+              <span class="tool-icon trap-icon" aria-hidden="true">▲</span>
+              <span>トゲ罠</span>
+            </button>
+          </div>
+        </section>
 
         <div class="info-card" id="toolInfo"></div>
 
-        <div class="action-row">
-          <button id="simulateButton" class="menu-button compact primary" type="button">徘徊テスト開始</button>
-          <button id="resetButton" class="menu-button compact" type="button">初期化</button>
-        </div>
-        <div class="action-row">
-          <button id="saveButton" class="menu-button compact" type="button">設計保存</button>
-          <button id="loadButton" class="menu-button compact" type="button">設計読込</button>
+        <div class="primary-actions">
+          <button id="simulateButton" class="game-action primary" type="button">
+            <span aria-hidden="true">▶</span>
+            <span>徘徊テスト開始</span>
+          </button>
         </div>
 
-        <p class="note">ゲーム画面はGBモード。配置済みの壁・モンスター・罠はダブルタップで削除できます。入口・出口は必須なので削除せず移動します。入口から出口への通路は常に1本以上必要です。</p>
+        <div class="secondary-actions">
+          <button id="saveButton" class="game-action" type="button">保存</button>
+          <button id="loadButton" class="game-action" type="button">読込</button>
+          <button id="resetButton" class="game-action danger" type="button">初期化</button>
+        </div>
+
+        <div class="gesture-guide">
+          <div><span>1</span> タップ：配置</div>
+          <div><span>2</span> 長押し＋移動：連続配置</div>
+          <div><span>3</span> ダブルタップ：削除</div>
+          <div><span>4</span> ピンチ：拡大縮小</div>
+        </div>
       </div>
     </aside>
   </main>
