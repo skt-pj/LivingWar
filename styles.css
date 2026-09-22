@@ -46,7 +46,7 @@ button { font: inherit; }
 
 .screen-frame {
   width: 100%;
-  aspect-ratio: 5 / 4;
+  aspect-ratio: 160 / 144;
   background: #20252c;
   border: 1px solid #15191e;
   border-radius: 14px;
@@ -60,7 +60,7 @@ button { font: inherit; }
   height: 100%;
   overflow: hidden;
   touch-action: none;
-  background: #d7cab1;
+  background: var(--gb0);
 }
 
 #game {
@@ -71,6 +71,8 @@ button { font: inherit; }
   user-select: none;
   -webkit-user-select: none;
   cursor: crosshair;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 .screen-toolbar {
