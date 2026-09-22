@@ -14,7 +14,9 @@
   const TILE = 8;
   const COLS = 20;
   const ROWS = 16;
-  const SAVE_KEY = "livingwar:dungeon:v2";
+  const LEGACY_SAVE_KEY = "livingwar:dungeon:v2";
+  const SAVE_SLOT_PREFIX = "livingwar:save:v3:";
+  const SAVE_SLOT_COUNT = 3;
   const MAX_ZOOM = 4;
   const LONG_PRESS_MS = 350;
   const DRAG_THRESHOLD = 7;
@@ -63,6 +65,10 @@
   const resetButton = document.getElementById("resetButton");
   const saveButton = document.getElementById("saveButton");
   const loadButton = document.getElementById("loadButton");
+  const savePanel = document.getElementById("savePanel");
+  const savePanelTitle = document.getElementById("savePanelTitle");
+  const saveSlotList = document.getElementById("saveSlotList");
+  const closeSavePanelButton = document.getElementById("closeSavePanelButton");
   const zoomResetButton = document.getElementById("zoomResetButton");
   const toolInfo = document.getElementById("toolInfo");
   const monsterCount = document.getElementById("monsterCount");
@@ -97,6 +103,7 @@
   let nextMessageId = 1;
   let lastMessageText = "";
   let lastMessageAt = 0;
+  let savePanelMode = "save";
 
   const state = {
     tiles: [],
@@ -982,9 +989,37 @@
     requestAnimationFrame(loop);
   }
 
-  function saveDungeon() {
-    const data = {
-      version: 2,
+  function saveSlotKey(slot) {
+    return `${SAVE_SLOT_PREFIX}${slot}`;
+  }
+
+  function isValidDungeonData(data) {
+    return Boolean(
+      data &&
+      (data.version === 2 || data.version === 3) &&
+      data.cols === COLS &&
+      data.rows === ROWS &&
+      Array.isArray(data.tiles) &&
+      data.tiles.length === ROWS &&
+      data.tiles.every((row) => Array.isArray(row) && row.length === COLS)
+    );
+  }
+
+  function readSaveSlot(slot) {
+    try {
+      const raw = localStorage.getItem(saveSlotKey(slot));
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      return isValidDungeonData(data) ? data : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function createSaveData() {
+    return {
+      version: 3,
+      savedAt: new Date().toISOString(),
       cols: COLS,
       rows: ROWS,
       tiles: state.tiles,
@@ -993,53 +1028,166 @@
       entrance: state.entrance,
       stairs: state.stairs,
       nextMonsterId,
+      roomCount: detectRooms().length,
     };
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-    screenHelp.textContent = "1Fの設計をブラウザに保存しました。";
-    addMessage("1Fの設計を保存しました。", "info");
   }
 
-  function loadDungeon() {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) {
-      screenHelp.textContent = "保存データがありません。";
+  function formatSaveTime(value) {
+    if (!value) return "旧セーブデータ";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "保存日時不明";
+
+    return new Intl.DateTimeFormat("ja-JP", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(date);
+  }
+
+  function renderSaveSlots() {
+    if (!saveSlotList) return;
+
+    for (let slot = 1; slot <= SAVE_SLOT_COUNT; slot++) {
+      const element = saveSlotList.querySelector(`.save-slot[data-slot="${slot}"]`);
+      if (!element) continue;
+
+      const data = readSaveSlot(slot);
+      const title = element.querySelector(".save-slot-title");
+      const meta = element.querySelector(".save-slot-meta");
+      const action = element.querySelector('[data-save-action="slot"]');
+      const deleteButton = element.querySelector('[data-save-action="delete"]');
+
+      element.classList.toggle("save-slot--filled", Boolean(data));
+
+      if (!data) {
+        title.textContent = "空きスロット";
+        meta.textContent = "データなし";
+        action.textContent = savePanelMode === "save" ? "セーブ" : "空き";
+        action.disabled = savePanelMode === "load";
+        deleteButton.classList.add("hidden");
+        continue;
+      }
+
+      const monsters = Array.isArray(data.monsters) ? data.monsters.length : 0;
+      const traps = Array.isArray(data.traps) ? data.traps.length : 0;
+      const roomText = Number.isInteger(data.roomCount) ? `部屋 ${data.roomCount}` : "部屋 -";
+
+      title.textContent = `1F / ${formatSaveTime(data.savedAt)}`;
+      meta.textContent = `${roomText} · 魔物 ${monsters} · 罠 ${traps}`;
+      action.textContent = savePanelMode === "save" ? "上書き" : "ロード";
+      action.disabled = false;
+      deleteButton.classList.remove("hidden");
+    }
+  }
+
+  function openSavePanel(mode) {
+    savePanelMode = mode;
+    savePanelTitle.textContent = mode === "save" ? "セーブ" : "ロード";
+    savePanel.classList.remove("hidden");
+    renderSaveSlots();
+    requestAnimationFrame(() => savePanel.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+  }
+
+  function closeSavePanel() {
+    savePanel.classList.add("hidden");
+  }
+
+  function saveDungeonToSlot(slot) {
+    try {
+      const data = createSaveData();
+      localStorage.setItem(saveSlotKey(slot), JSON.stringify(data));
+      renderSaveSlots();
+
+      const text = `スロット${slot}に1Fをセーブしました。`;
+      screenHelp.textContent = text;
+      addMessage(text, "info");
+    } catch {
+      const text = "セーブに失敗しました。ブラウザの保存領域を確認してください。";
+      screenHelp.textContent = text;
+      addMessage(text, "warning");
+    }
+  }
+
+  function applyDungeonData(data) {
+    if (!isValidDungeonData(data)) throw new Error("invalid dungeon");
+
+    state.tiles = data.tiles.map((row) => [...row]);
+    state.monsters = Array.isArray(data.monsters) ? data.monsters.map((monster) => ({ ...monster })) : [];
+    state.traps = Array.isArray(data.traps) ? data.traps.map((trap) => ({ ...trap })) : [];
+    state.entrance = data.entrance ? { ...data.entrance } : null;
+    state.stairs = data.stairs ? { ...data.stairs } : null;
+    nextMonsterId = Number.isInteger(data.nextMonsterId) ? data.nextMonsterId : state.monsters.length + 1;
+
+    if (!hasEntranceToExitPath()) {
+      repairEntranceToExitPath();
+    }
+
+    simulation = false;
+    updateSimulationButton();
+    updateCounts();
+    resetView();
+    roomEffects = [];
+    analyzeRooms({ announce: false });
+    drawDungeon();
+  }
+
+  function loadDungeonFromSlot(slot) {
+    const data = readSaveSlot(slot);
+    if (!data) {
+      const text = `スロット${slot}にセーブデータがありません。`;
+      screenHelp.textContent = text;
+      addMessage(text, "warning");
       return;
     }
 
     try {
-      const data = JSON.parse(raw);
-      if (
-        data.version !== 2 ||
-        data.cols !== COLS ||
-        data.rows !== ROWS ||
-        !Array.isArray(data.tiles) ||
-        data.tiles.length !== ROWS
-      ) {
-        throw new Error("invalid dungeon");
-      }
+      applyDungeonData(data);
+      closeSavePanel();
 
-      state.tiles = data.tiles;
-      state.monsters = Array.isArray(data.monsters) ? data.monsters : [];
-      state.traps = Array.isArray(data.traps) ? data.traps : [];
-      state.entrance = data.entrance || null;
-      state.stairs = data.stairs || null;
-      nextMonsterId = Number.isInteger(data.nextMonsterId) ? data.nextMonsterId : state.monsters.length + 1;
-
-      if (!hasEntranceToExitPath()) {
-        repairEntranceToExitPath();
-      }
-
-      simulation = false;
-      updateSimulationButton();
-      updateCounts();
-      resetView();
-      analyzeRooms({ announce: false });
-      drawDungeon();
-      screenHelp.textContent = "保存した1Fを読み込みました。";
-      addMessage("保存した1Fを読み込みました。", "info");
+      const text = `スロット${slot}の1Fをロードしました。`;
+      screenHelp.textContent = text;
+      addMessage(text, "info");
     } catch {
-      screenHelp.textContent = "保存データを読み込めませんでした。";
-      addMessage("保存データを読み込めませんでした。", "warning");
+      const text = `スロット${slot}のセーブデータを読み込めませんでした。`;
+      screenHelp.textContent = text;
+      addMessage(text, "warning");
+    }
+  }
+
+  function deleteSaveSlot(slot) {
+    if (!readSaveSlot(slot)) return;
+    if (!window.confirm(`スロット${slot}のセーブデータを削除しますか？`)) return;
+
+    localStorage.removeItem(saveSlotKey(slot));
+    renderSaveSlots();
+
+    const text = `スロット${slot}のセーブデータを削除しました。`;
+    screenHelp.textContent = text;
+    addMessage(text, "warning");
+  }
+
+  function migrateLegacySave() {
+    if (readSaveSlot(1)) return;
+
+    try {
+      const raw = localStorage.getItem(LEGACY_SAVE_KEY);
+      if (!raw) return;
+
+      const legacy = JSON.parse(raw);
+      if (!isValidDungeonData(legacy)) return;
+
+      const migrated = {
+        ...legacy,
+        version: 3,
+        savedAt: new Date().toISOString(),
+        roomCount: null,
+      };
+      localStorage.setItem(saveSlotKey(1), JSON.stringify(migrated));
+    } catch {
+      // 旧セーブが壊れている場合は無視する。
     }
   }
 
@@ -1356,8 +1504,29 @@
     addMessage("1Fを初期状態に戻しました。", "warning");
   });
 
-  saveButton.addEventListener("click", saveDungeon);
-  loadButton.addEventListener("click", loadDungeon);
+  saveButton.addEventListener("click", () => openSavePanel("save"));
+  loadButton.addEventListener("click", () => openSavePanel("load"));
+  closeSavePanelButton.addEventListener("click", closeSavePanel);
+
+  saveSlotList.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-save-action]");
+    if (!button) return;
+
+    const slot = Number(button.dataset.slot);
+    if (!Number.isInteger(slot) || slot < 1 || slot > SAVE_SLOT_COUNT) return;
+
+    if (button.dataset.saveAction === "delete") {
+      deleteSaveSlot(slot);
+      return;
+    }
+
+    if (savePanelMode === "save") {
+      saveDungeonToSlot(slot);
+    } else {
+      loadDungeonFromSlot(slot);
+    }
+  });
+
   zoomResetButton.addEventListener("click", resetView);
 
   window.addEventListener("resize", () => {
@@ -1366,6 +1535,8 @@
   });
 
   makeInitialDungeon();
+  migrateLegacySave();
+  renderSaveSlots();
   setTool("floor");
   setMode("start");
   requestAnimationFrame(loop);
