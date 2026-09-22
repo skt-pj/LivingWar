@@ -754,6 +754,10 @@
     if (tile) placeAt(tile.x, tile.y);
   });
 
+  canvas.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+  });
+
   simulateButton.addEventListener("click", () => {
     simulation = !simulation;
     lastStepAt = performance.now();
