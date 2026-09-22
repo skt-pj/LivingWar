@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <meta name="theme-color" content="#0b0d12" />
   <title>LivingWar - 魔王軍ダンジョン製作</title>
-  <link rel="stylesheet" href="styles.css?v=rooms12" />
+  <link rel="stylesheet" href="styles.css?v=save13" />
 </head>
 <body>
   <main class="app-shell">
@@ -175,10 +175,49 @@
         </div>
 
         <div class="secondary-actions">
-          <button id="saveButton" class="game-action" type="button">保存</button>
-          <button id="loadButton" class="game-action" type="button">読込</button>
+          <button id="saveButton" class="game-action" type="button">セーブ</button>
+          <button id="loadButton" class="game-action" type="button">ロード</button>
           <button id="resetButton" class="game-action danger" type="button">初期化</button>
         </div>
+
+        <section class="save-panel hidden" id="savePanel" aria-label="セーブデータ">
+          <div class="save-panel-head">
+            <div>
+              <span id="savePanelTitle">セーブ</span>
+              <small>SAVE DATA</small>
+            </div>
+            <button id="closeSavePanelButton" class="save-close-button" type="button" aria-label="セーブ画面を閉じる">×</button>
+          </div>
+          <div class="save-slot-list" id="saveSlotList">
+            <article class="save-slot" data-slot="1">
+              <div class="save-slot-number">01</div>
+              <div class="save-slot-copy">
+                <strong class="save-slot-title">空きスロット</strong>
+                <span class="save-slot-meta">データなし</span>
+              </div>
+              <button class="save-slot-action" type="button" data-save-action="slot" data-slot="1">セーブ</button>
+              <button class="save-slot-delete hidden" type="button" data-save-action="delete" data-slot="1">削除</button>
+            </article>
+            <article class="save-slot" data-slot="2">
+              <div class="save-slot-number">02</div>
+              <div class="save-slot-copy">
+                <strong class="save-slot-title">空きスロット</strong>
+                <span class="save-slot-meta">データなし</span>
+              </div>
+              <button class="save-slot-action" type="button" data-save-action="slot" data-slot="2">セーブ</button>
+              <button class="save-slot-delete hidden" type="button" data-save-action="delete" data-slot="2">削除</button>
+            </article>
+            <article class="save-slot" data-slot="3">
+              <div class="save-slot-number">03</div>
+              <div class="save-slot-copy">
+                <strong class="save-slot-title">空きスロット</strong>
+                <span class="save-slot-meta">データなし</span>
+              </div>
+              <button class="save-slot-action" type="button" data-save-action="slot" data-slot="3">セーブ</button>
+              <button class="save-slot-delete hidden" type="button" data-save-action="delete" data-slot="3">削除</button>
+            </article>
+          </div>
+        </section>
 
         <div class="gesture-guide">
           <div><span>1</span> タップ：配置</div>
@@ -190,6 +229,6 @@
     </aside>
   </main>
 
-  <script src="game.js?v=rooms12"></script>
+  <script src="game.js?v=save13"></script>
 </body>
 </html>
