@@ -18,6 +18,7 @@
   const MAX_ZOOM = 4;
   const LONG_PRESS_MS = 350;
   const DRAG_THRESHOLD = 7;
+  const DOUBLE_TAP_MS = 300;
 
   const MONSTER_DEFS = {
     slime: {
@@ -86,6 +87,8 @@
   let pan = null;
   let longPressTimer = null;
   let paintStroke = null;
+  let pendingTapTimer = null;
+  let pendingTap = null;
 
   const state = {
     tiles: [],
@@ -347,6 +350,74 @@
   function removeMonsterAndTrapAt(x, y) {
     state.monsters = state.monsters.filter((m) => !(m.x === x && m.y === y));
     state.traps = state.traps.filter((t) => !(t.x === x && t.y === y));
+  }
+
+  function removePlacedAt(x, y) {
+    if (simulation) return false;
+
+    const monsterBefore = state.monsters.length;
+    const trapBefore = state.traps.length;
+    removeMonsterAndTrapAt(x, y);
+
+    let removed = state.monsters.length !== monsterBefore || state.traps.length !== trapBefore;
+
+    if (state.tiles[y][x] === "wall" && !samePoint(state.entrance, x, y) && !samePoint(state.stairs, x, y)) {
+      state.tiles[y][x] = "floor";
+      removed = true;
+    }
+
+    if (!removed) {
+      if (samePoint(state.entrance, x, y) || samePoint(state.stairs, x, y)) {
+        screenHelp.textContent = "入口と出口は必須なので削除できません。移動してください。";
+      }
+      return false;
+    }
+
+    enforceValidDungeonRoute();
+    updateCounts();
+    drawDungeon();
+    screenHelp.textContent = "配置物を削除しました。";
+    return true;
+  }
+
+  function runPendingTap() {
+    if (!pendingTap) return;
+
+    const tile = pendingTap.tile;
+    pendingTap = null;
+    if (pendingTapTimer !== null) {
+      clearTimeout(pendingTapTimer);
+      pendingTapTimer = null;
+    }
+    placeAt(tile.x, tile.y);
+  }
+
+  function queueTap(tile) {
+    if (!tile || simulation) return;
+
+    const now = Date.now();
+    if (
+      pendingTap &&
+      now - pendingTap.time <= DOUBLE_TAP_MS &&
+      pendingTap.tile.x === tile.x &&
+      pendingTap.tile.y === tile.y
+    ) {
+      if (pendingTapTimer !== null) {
+        clearTimeout(pendingTapTimer);
+        pendingTapTimer = null;
+      }
+      pendingTap = null;
+      removePlacedAt(tile.x, tile.y);
+      suppressClickUntil = now + 500;
+      return;
+    }
+
+    if (pendingTap) runPendingTap();
+
+    pendingTap = { tile, time: now };
+    pendingTapTimer = setTimeout(() => {
+      runPendingTap();
+    }, DOUBLE_TAP_MS);
   }
 
   function hasEntranceToExitPath(entrance = state.entrance, stairs = state.stairs) {
@@ -735,6 +806,7 @@
         startOffsetX: view.offsetX,
         startOffsetY: view.offsetY,
         moved: false,
+        allowTap: true,
       };
       paintStroke = null;
       beginLongPressPlacement(touch.clientX, touch.clientY);
@@ -798,6 +870,8 @@
   viewport.addEventListener("touchend", (event) => {
     const didPan = Boolean(pan && pan.moved);
     const didPaint = Boolean(paintStroke && paintStroke.active);
+    const allowTap = Boolean(pan && pan.allowTap && !didPan && !didPaint);
+    const endedTouch = event.changedTouches[0] || null;
 
     clearLongPressTimer();
 
@@ -809,9 +883,13 @@
 
       if (didPaint) {
         screenHelp.textContent = "連続設置を終了しました。";
-        suppressClickUntil = Date.now() + 350;
+        suppressClickUntil = Date.now() + 500;
       } else if (didPan) {
-        suppressClickUntil = Date.now() + 250;
+        suppressClickUntil = Date.now() + 350;
+      } else if (allowTap && endedTouch) {
+        const tile = canvasToTile(endedTouch);
+        if (tile) queueTap(tile);
+        suppressClickUntil = Date.now() + 700;
       }
     } else if (event.touches.length === 1 && pinch === null) {
       const touch = event.touches[0];
@@ -821,6 +899,7 @@
         startOffsetX: view.offsetX,
         startOffsetY: view.offsetY,
         moved: false,
+        allowTap: false,
       };
       paintStroke = null;
     }
@@ -871,7 +950,11 @@
   canvas.addEventListener("click", (event) => {
     if (mode !== "editor" || Date.now() < suppressClickUntil) return;
     const tile = canvasToTile(event);
-    if (tile) placeAt(tile.x, tile.y);
+    if (tile) queueTap(tile);
+  });
+
+  canvas.addEventListener("dblclick", (event) => {
+    event.preventDefault();
   });
 
   canvas.addEventListener("contextmenu", (event) => {
