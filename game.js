@@ -41,6 +41,7 @@
   };
 
   const TOOL_INFO = {
+    room: "部屋\nドラッグで範囲を指定します。外周は壁、内部は床になり、出入口を1マス自動で作ります。",
     floor: "床\n歩行可能なマスです。",
     wall: "壁\n移動不可。入口から出口（階段）への通路を塞ぐ配置はできません。モンスター・罠は通路判定に含みません。",
     erase: "消去\nモンスター・罠・設備を消し、床に戻します。",
@@ -103,6 +104,7 @@
   let pendingTapTimer = null;
   let pendingTap = null;
   let placementPreviewTile = null;
+  let roomDrag = null;
   let roomSnapshot = [];
   let roomEffects = [];
   let nextMessageId = 1;
@@ -160,6 +162,10 @@
   }
 
   function setTool(tool) {
+    if (roomDrag) {
+      roomDrag = null;
+      drawDungeon();
+    }
     selectedTool = tool;
     toolButtons.forEach((button) => button.classList.toggle("active", button.dataset.tool === tool));
     toolInfo.textContent = TOOL_INFO[tool] || "";
@@ -315,6 +321,7 @@
     state.traps.forEach(drawTrap);
     state.monsters.forEach(drawMonster);
     drawPlacementPreview();
+    drawRoomBuildPreview();
     drawRoomEffects(performance.now());
   }
 
@@ -456,6 +463,172 @@
     ctx.fillRect(px, py + TILE - 2, 1, 2);
     ctx.fillRect(px + TILE - 2, py + TILE - 1, 2, 1);
     ctx.fillRect(px + TILE - 1, py + TILE - 2, 1, 2);
+  }
+
+  function normalizeRoomRect(start, end) {
+    return {
+      minX: Math.min(start.x, end.x),
+      maxX: Math.max(start.x, end.x),
+      minY: Math.min(start.y, end.y),
+      maxY: Math.max(start.y, end.y),
+      width: Math.abs(end.x - start.x) + 1,
+      height: Math.abs(end.y - start.y) + 1,
+    };
+  }
+
+  function isRoomPerimeter(rect, x, y) {
+    return x === rect.minX || x === rect.maxX || y === rect.minY || y === rect.maxY;
+  }
+
+  function roomDoorCandidates(rect) {
+    const candidates = [];
+
+    for (let x = rect.minX + 1; x < rect.maxX; x++) {
+      candidates.push({ x, y: rect.minY, outsideX: x, outsideY: rect.minY - 1 });
+      candidates.push({ x, y: rect.maxY, outsideX: x, outsideY: rect.maxY + 1 });
+    }
+    for (let y = rect.minY + 1; y < rect.maxY; y++) {
+      candidates.push({ x: rect.minX, y, outsideX: rect.minX - 1, outsideY: y });
+      candidates.push({ x: rect.maxX, y, outsideX: rect.maxX + 1, outsideY: y });
+    }
+
+    return candidates.filter((candidate) =>
+      candidate.outsideX >= 0 &&
+      candidate.outsideX < COLS &&
+      candidate.outsideY >= 0 &&
+      candidate.outsideY < ROWS &&
+      state.tiles[candidate.outsideY][candidate.outsideX] === "floor"
+    );
+  }
+
+  function chooseRoomDoor(rect) {
+    const candidates = roomDoorCandidates(rect);
+    if (candidates.length === 0) return null;
+
+    const target = state.entrance || {
+      x: Math.floor((rect.minX + rect.maxX) / 2),
+      y: Math.floor((rect.minY + rect.maxY) / 2),
+    };
+
+    return candidates.sort((a, b) => {
+      const distanceA = Math.abs(a.x - target.x) + Math.abs(a.y - target.y);
+      const distanceB = Math.abs(b.x - target.x) + Math.abs(b.y - target.y);
+      return distanceA - distanceB;
+    })[0];
+  }
+
+  function roomRectStatus(rect) {
+    if (rect.width < 4 || rect.height < 4) {
+      return { valid: false, message: "部屋は外周を含めて4×4マス以上にしてください。" };
+    }
+
+    if (
+      rect.minX <= 0 ||
+      rect.minY <= 0 ||
+      rect.maxX >= COLS - 1 ||
+      rect.maxY >= ROWS - 1
+    ) {
+      return { valid: false, message: "部屋はダンジョン外周から1マス内側に作ってください。" };
+    }
+
+    for (let y = rect.minY; y <= rect.maxY; y++) {
+      for (let x = rect.minX; x <= rect.maxX; x++) {
+        if (!isRoomPerimeter(rect, x, y)) continue;
+        if (samePoint(state.entrance, x, y) || samePoint(state.stairs, x, y)) {
+          return { valid: false, message: "入口・出口に壁が重なる部屋は作れません。" };
+        }
+      }
+    }
+
+    const door = chooseRoomDoor(rect);
+    if (!door) {
+      return { valid: false, message: "外側の床につながる出入口を作れません。" };
+    }
+
+    return { valid: true, door };
+  }
+
+  function drawRoomBuildPreview() {
+    if (!roomDrag || !roomDrag.active || mode !== "editor" || simulation) return;
+
+    const rect = normalizeRoomRect(roomDrag.startTile, roomDrag.currentTile);
+    const status = roomRectStatus(rect);
+    const door = status.door || null;
+
+    for (let y = rect.minY; y <= rect.maxY; y++) {
+      for (let x = rect.minX; x <= rect.maxX; x++) {
+        const isDoor = door && door.x === x && door.y === y;
+        const tileType = isRoomPerimeter(rect, x, y) && !isDoor ? "wall" : "floor";
+        drawTile(x, y, tileType);
+      }
+    }
+
+    ctx.strokeStyle = status.valid ? GB_COLORS.dark : GB_COLORS.light;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(
+      rect.minX * TILE + 0.5,
+      HUD_H + rect.minY * TILE + 0.5,
+      rect.width * TILE - 1,
+      rect.height * TILE - 1
+    );
+  }
+
+  function updateRoomDragHelp() {
+    if (!roomDrag) return;
+    const rect = normalizeRoomRect(roomDrag.startTile, roomDrag.currentTile);
+    const innerWidth = Math.max(0, rect.width - 2);
+    const innerHeight = Math.max(0, rect.height - 2);
+    const innerArea = innerWidth * innerHeight;
+    screenHelp.textContent = `部屋 ${rect.width}×${rect.height} / 床 ${innerArea}マス。指を離して確定。`;
+  }
+
+  function commitRoomDrag(start, end) {
+    if (!start || !end || simulation) return false;
+
+    const rect = normalizeRoomRect(start, end);
+    const status = roomRectStatus(rect);
+
+    if (!status.valid) {
+      screenHelp.textContent = status.message;
+      addMessage(status.message, "warning", true);
+      drawDungeon();
+      return false;
+    }
+
+    const previousTiles = state.tiles.map((row) => [...row]);
+    const wallKeys = new Set();
+
+    for (let y = rect.minY; y <= rect.maxY; y++) {
+      for (let x = rect.minX; x <= rect.maxX; x++) {
+        const isDoor = status.door.x === x && status.door.y === y;
+        if (isRoomPerimeter(rect, x, y) && !isDoor) {
+          state.tiles[y][x] = "wall";
+          wallKeys.add(roomTileKey(x, y));
+        } else {
+          state.tiles[y][x] = "floor";
+        }
+      }
+    }
+
+    if (!hasEntranceToExitPath()) {
+      state.tiles = previousTiles;
+      const text = "入口から出口への経路を塞ぐため、この部屋は作れません。";
+      screenHelp.textContent = text;
+      addMessage(text, "warning", true);
+      drawDungeon();
+      return false;
+    }
+
+    state.monsters = state.monsters.filter((monster) => !wallKeys.has(roomTileKey(monster.x, monster.y)));
+    state.traps = state.traps.filter((trap) => !wallKeys.has(roomTileKey(trap.x, trap.y)));
+
+    updateCounts();
+    analyzeRooms();
+    drawDungeon();
+
+    const innerArea = (rect.width - 2) * (rect.height - 2);
+    screenHelp.textContent = `${roomSizeLabel(innerArea)}を作りました。床 ${innerArea}マス。`;
+    return true;
   }
 
   function placementTileFromTouch(touch) {
@@ -899,6 +1072,11 @@
   function placeAt(x, y) {
     if (simulation) return;
 
+    if (selectedTool === "room") {
+      screenHelp.textContent = "部屋ツールはドラッグして範囲を指定してください。";
+      return;
+    }
+
     if (selectedTool === "wall") {
       if (samePoint(state.entrance, x, y) || samePoint(state.stairs, x, y)) {
         rejectBlockedRoute();
@@ -1299,6 +1477,7 @@
   }
 
   function beginLongPressPlacement(clientX, clientY) {
+    if (selectedTool === "room") return;
     clearLongPressTimer();
     longPressTimer = setTimeout(() => {
       longPressTimer = null;
@@ -1325,6 +1504,7 @@
       event.preventDefault();
       clearLongPressTimer();
       paintStroke = null;
+      roomDrag = null;
       placementPreviewTile = null;
       drawDungeon();
       pan = null;
@@ -1343,6 +1523,27 @@
 
     if (event.touches.length === 1) {
       const touch = event.touches[0];
+
+      if (selectedTool === "room" && !simulation) {
+        event.preventDefault();
+        const tile = placementTileFromTouch(touch);
+        if (!tile) return;
+
+        pan = null;
+        paintStroke = null;
+        placementPreviewTile = null;
+        roomDrag = {
+          active: true,
+          pointerType: "touch",
+          startTile: tile,
+          currentTile: tile,
+        };
+        updateRoomDragHelp();
+        drawDungeon();
+        suppressClickUntil = Date.now() + 700;
+        return;
+      }
+
       pan = {
         startX: touch.clientX,
         startY: touch.clientY,
@@ -1384,6 +1585,18 @@
 
     const touch = event.touches[0];
 
+    if (roomDrag && roomDrag.active && roomDrag.pointerType === "touch") {
+      event.preventDefault();
+      const tile = placementTileFromTouch(touch);
+      if (tile) {
+        roomDrag.currentTile = tile;
+        updateRoomDragHelp();
+        drawDungeon();
+      }
+      suppressClickUntil = Date.now() + 700;
+      return;
+    }
+
     if (paintStroke && paintStroke.active) {
       event.preventDefault();
       const tile = placementTileFromTouch(touch);
@@ -1419,7 +1632,11 @@
   viewport.addEventListener("touchend", (event) => {
     const didPan = Boolean(pan && pan.moved);
     const didPaint = Boolean(paintStroke && paintStroke.active);
-    const allowTap = Boolean(pan && pan.allowTap && !didPan && !didPaint);
+    const roomToCommit = roomDrag && roomDrag.active && roomDrag.pointerType === "touch"
+      ? { startTile: roomDrag.startTile, currentTile: roomDrag.currentTile }
+      : null;
+    const didRoomDrag = Boolean(roomToCommit);
+    const allowTap = Boolean(pan && pan.allowTap && !didPan && !didPaint && !didRoomDrag);
     const endedTouch = event.changedTouches[0] || null;
 
     clearLongPressTimer();
@@ -1429,9 +1646,13 @@
     if (event.touches.length === 0) {
       pan = null;
       paintStroke = null;
+      roomDrag = null;
       placementPreviewTile = null;
 
-      if (didPaint) {
+      if (didRoomDrag) {
+        commitRoomDrag(roomToCommit.startTile, roomToCommit.currentTile);
+        suppressClickUntil = Date.now() + 700;
+      } else if (didPaint) {
         drawDungeon();
         screenHelp.textContent = "連続設置を終了しました。";
         suppressClickUntil = Date.now() + 500;
@@ -1461,6 +1682,7 @@
     pinch = null;
     pan = null;
     paintStroke = null;
+    roomDrag = null;
     placementPreviewTile = null;
     drawDungeon();
     suppressClickUntil = Date.now() + 250;
@@ -1524,6 +1746,48 @@
 
   toolButtons.forEach((button) => {
     button.addEventListener("click", () => setTool(button.dataset.tool));
+  });
+
+  canvas.addEventListener("mousedown", (event) => {
+    if (mode !== "editor" || simulation || selectedTool !== "room" || event.button !== 0) return;
+
+    const tile = canvasToTile(event);
+    if (!tile) return;
+
+    event.preventDefault();
+    roomDrag = {
+      active: true,
+      pointerType: "mouse",
+      startTile: tile,
+      currentTile: tile,
+    };
+    placementPreviewTile = null;
+    updateRoomDragHelp();
+    drawDungeon();
+    suppressClickUntil = Date.now() + 700;
+  });
+
+  canvas.addEventListener("mousemove", (event) => {
+    if (!roomDrag || !roomDrag.active || roomDrag.pointerType !== "mouse") return;
+    const tile = canvasToTile(event);
+    if (!tile) return;
+
+    roomDrag.currentTile = tile;
+    updateRoomDragHelp();
+    drawDungeon();
+    suppressClickUntil = Date.now() + 700;
+  });
+
+  window.addEventListener("mouseup", (event) => {
+    if (!roomDrag || !roomDrag.active || roomDrag.pointerType !== "mouse" || event.button !== 0) return;
+
+    const roomToCommit = {
+      startTile: roomDrag.startTile,
+      currentTile: roomDrag.currentTile,
+    };
+    roomDrag = null;
+    commitRoomDrag(roomToCommit.startTile, roomToCommit.currentTile);
+    suppressClickUntil = Date.now() + 700;
   });
 
   canvas.addEventListener("click", (event) => {
