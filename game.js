@@ -69,6 +69,7 @@
   const trapCount = document.getElementById("trapCount");
   const simState = document.getElementById("simState");
   const screenHelp = document.getElementById("screenHelp");
+  const messageLog = document.getElementById("messageLog");
   const toolButtons = [...document.querySelectorAll(".tool-button")];
 
   let mode = "start";
@@ -91,6 +92,11 @@
   let pendingTapTimer = null;
   let pendingTap = null;
   let placementPreviewTile = null;
+  let roomSnapshot = [];
+  let roomEffects = [];
+  let nextMessageId = 1;
+  let lastMessageText = "";
+  let lastMessageAt = 0;
 
   const state = {
     tiles: [],
@@ -133,7 +139,9 @@
       screenHelp.textContent = "マスをクリックして編集。2本指のピンチで拡大・縮小できます。";
       updateSimulationButton();
       enforceValidDungeonRoute();
+      analyzeRooms({ announce: false });
       drawDungeon();
+      addMessage("ダンジョン製作を開始しました。", "info", true);
     }
   }
 
@@ -146,6 +154,46 @@
   function updateCounts() {
     monsterCount.textContent = String(state.monsters.length);
     trapCount.textContent = String(state.traps.length);
+  }
+
+  function addMessage(text, kind = "info", dedupe = false) {
+    if (!messageLog || !text) return;
+
+    const now = Date.now();
+    if (dedupe && text === lastMessageText && now - lastMessageAt < 900) return;
+    lastMessageText = text;
+    lastMessageAt = now;
+
+    const nearBottom = messageLog.scrollHeight - messageLog.scrollTop - messageLog.clientHeight < 28;
+    const entry = document.createElement("div");
+    entry.className = `message-entry message-entry--${kind}`;
+
+    const number = document.createElement("span");
+    number.className = "message-index";
+    number.textContent = String(nextMessageId++).padStart(2, "0");
+
+    const body = document.createElement("span");
+    body.className = "message-text";
+    body.textContent = text;
+
+    entry.append(number, body);
+    messageLog.appendChild(entry);
+
+    while (messageLog.children.length > 80) {
+      messageLog.removeChild(messageLog.firstElementChild);
+    }
+
+    if (nearBottom) {
+      messageLog.scrollTop = messageLog.scrollHeight;
+    }
+  }
+
+  function resetMessageHistory() {
+    if (!messageLog) return;
+    messageLog.replaceChildren();
+    nextMessageId = 1;
+    lastMessageText = "";
+    lastMessageAt = 0;
   }
 
   function updateSimulationButton() {
@@ -228,6 +276,7 @@
     state.traps.forEach(drawTrap);
     state.monsters.forEach(drawMonster);
     drawPlacementPreview();
+    drawRoomEffects(performance.now());
   }
 
   function drawHud() {
@@ -417,6 +466,227 @@
     return point && point.x === x && point.y === y;
   }
 
+  function roomTileKey(x, y) {
+    return `${x},${y}`;
+  }
+
+  function isFloorTile(x, y) {
+    return x >= 0 && x < COLS && y >= 0 && y < ROWS && state.tiles[y][x] === "floor";
+  }
+
+  function isRoomCoreTile(x, y) {
+    if (!isFloorTile(x, y)) return false;
+
+    for (let oy = -1; oy <= 0; oy++) {
+      for (let ox = -1; ox <= 0; ox++) {
+        const x0 = x + ox;
+        const y0 = y + oy;
+        if (
+          isFloorTile(x0, y0) &&
+          isFloorTile(x0 + 1, y0) &&
+          isFloorTile(x0, y0 + 1) &&
+          isFloorTile(x0 + 1, y0 + 1)
+        ) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  function roomSizeLabel(area) {
+    if (area <= 15) return "小部屋";
+    if (area <= 35) return "中部屋";
+    return "大部屋";
+  }
+
+  function roomAttributeForTiles(tileSet) {
+    const monsters = state.monsters.filter((monster) => tileSet.has(roomTileKey(monster.x, monster.y))).length;
+    const traps = state.traps.filter((trap) => tileSet.has(roomTileKey(trap.x, trap.y))).length;
+
+    if (monsters >= 1 && traps >= 2) return "警備室";
+    if (traps >= 3) return "罠部屋";
+    if (monsters >= 2) return "魔物部屋";
+    return "空き部屋";
+  }
+
+  function detectRooms() {
+    const core = Array.from({ length: ROWS }, (_, y) =>
+      Array.from({ length: COLS }, (_, x) => isRoomCoreTile(x, y))
+    );
+    const visited = new Set();
+    const rooms = [];
+
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        if (!core[y][x]) continue;
+        const startKey = roomTileKey(x, y);
+        if (visited.has(startKey)) continue;
+
+        const queue = [{ x, y }];
+        const tiles = [];
+        visited.add(startKey);
+
+        for (let index = 0; index < queue.length; index++) {
+          const current = queue[index];
+          tiles.push(current);
+
+          for (const dir of DIRS) {
+            const nx = current.x + dir.x;
+            const ny = current.y + dir.y;
+            if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS || !core[ny][nx]) continue;
+            const key = roomTileKey(nx, ny);
+            if (visited.has(key)) continue;
+            visited.add(key);
+            queue.push({ x: nx, y: ny });
+          }
+        }
+
+        if (tiles.length < 4) continue;
+
+        const tileSet = new Set(tiles.map((tile) => roomTileKey(tile.x, tile.y)));
+        const xs = tiles.map((tile) => tile.x);
+        const ys = tiles.map((tile) => tile.y);
+        rooms.push({
+          tiles,
+          tileSet,
+          area: tiles.length,
+          sizeLabel: roomSizeLabel(tiles.length),
+          attribute: roomAttributeForTiles(tileSet),
+          bounds: {
+            minX: Math.min(...xs),
+            maxX: Math.max(...xs),
+            minY: Math.min(...ys),
+            maxY: Math.max(...ys),
+          },
+        });
+      }
+    }
+
+    return rooms;
+  }
+
+  function roomIntersectionCount(roomA, roomB) {
+    let count = 0;
+    const smaller = roomA.tileSet.size <= roomB.tileSet.size ? roomA.tileSet : roomB.tileSet;
+    const larger = smaller === roomA.tileSet ? roomB.tileSet : roomA.tileSet;
+    for (const key of smaller) {
+      if (larger.has(key)) count += 1;
+    }
+    return count;
+  }
+
+  function triggerRoomEffect(room) {
+    roomEffects.push({
+      tiles: room.tiles.map((tile) => ({ ...tile })),
+      bounds: { ...room.bounds },
+      startedAt: performance.now(),
+      duration: 1000,
+    });
+  }
+
+  function announceRoom(room, prefix = "完成") {
+    addMessage(`${room.sizeLabel}「${room.attribute}」が${prefix}しました。`, "room");
+    triggerRoomEffect(room);
+  }
+
+  function analyzeRooms({ announce = true } = {}) {
+    const currentRooms = detectRooms();
+    const unmatchedPrevious = new Set(roomSnapshot.map((_, index) => index));
+    const matches = new Map();
+
+    const currentByArea = currentRooms
+      .map((room, index) => ({ room, index }))
+      .sort((a, b) => b.room.area - a.room.area);
+
+    for (const { room, index } of currentByArea) {
+      let bestIndex = -1;
+      let bestScore = 0;
+
+      for (const previousIndex of unmatchedPrevious) {
+        const previous = roomSnapshot[previousIndex];
+        const intersection = roomIntersectionCount(room, previous);
+        if (intersection === 0) continue;
+        const currentRatio = intersection / room.area;
+        const previousRatio = intersection / previous.area;
+        const score = Math.min(currentRatio, previousRatio);
+
+        if (currentRatio >= 0.55 && previousRatio >= 0.35 && score > bestScore) {
+          bestScore = score;
+          bestIndex = previousIndex;
+        }
+      }
+
+      if (bestIndex >= 0) {
+        matches.set(index, bestIndex);
+        unmatchedPrevious.delete(bestIndex);
+      }
+    }
+
+    if (announce) {
+      currentRooms.forEach((room, index) => {
+        const previousIndex = matches.get(index);
+        if (previousIndex === undefined) {
+          announceRoom(room);
+          return;
+        }
+
+        const previous = roomSnapshot[previousIndex];
+        if (previous.sizeLabel !== room.sizeLabel) {
+          addMessage(`部屋の広さが「${room.sizeLabel}」に変わりました。`, "room");
+          triggerRoomEffect(room);
+        }
+        if (previous.attribute !== room.attribute) {
+          addMessage(`${room.sizeLabel}の属性が「${room.attribute}」に変わりました。`, "room");
+          triggerRoomEffect(room);
+        }
+      });
+
+      if (unmatchedPrevious.size > 0 && currentRooms.length < roomSnapshot.length) {
+        addMessage("部屋のつながりが変化しました。", "info", true);
+      }
+    }
+
+    roomSnapshot = currentRooms.map((room) => ({
+      ...room,
+      tiles: room.tiles.map((tile) => ({ ...tile })),
+      tileSet: new Set(room.tileSet),
+      bounds: { ...room.bounds },
+    }));
+
+    return currentRooms;
+  }
+
+  function drawRoomEffects(now) {
+    for (const effect of roomEffects) {
+      const elapsed = now - effect.startedAt;
+      if (elapsed < 0 || elapsed > effect.duration) continue;
+
+      const tileSet = new Set(effect.tiles.map((tile) => roomTileKey(tile.x, tile.y)));
+      const flash = Math.floor(elapsed / 110) % 2 === 0;
+      ctx.fillStyle = flash ? GB_COLORS.light : GB_COLORS.dark;
+      ctx.strokeStyle = flash ? GB_COLORS.dark : GB_COLORS.light;
+      ctx.lineWidth = 1;
+
+      for (const tile of effect.tiles) {
+        const px = tile.x * TILE;
+        const py = HUD_H + tile.y * TILE;
+
+        if (!tileSet.has(roomTileKey(tile.x, tile.y - 1))) ctx.fillRect(px, py, TILE, 1);
+        if (!tileSet.has(roomTileKey(tile.x, tile.y + 1))) ctx.fillRect(px, py + TILE - 1, TILE, 1);
+        if (!tileSet.has(roomTileKey(tile.x - 1, tile.y))) ctx.fillRect(px, py, 1, TILE);
+        if (!tileSet.has(roomTileKey(tile.x + 1, tile.y))) ctx.fillRect(px + TILE - 1, py, 1, TILE);
+      }
+
+      const centerX = Math.floor(((effect.bounds.minX + effect.bounds.maxX + 1) * TILE) / 2);
+      const centerY = HUD_H + Math.floor(((effect.bounds.minY + effect.bounds.maxY + 1) * TILE) / 2) - 3;
+      if (effect.bounds.maxX - effect.bounds.minX >= 3 && effect.bounds.maxY - effect.bounds.minY >= 1) {
+        pixelText("ROOM", centerX, centerY, 1, flash ? GB_COLORS.dark : GB_COLORS.light, "center");
+      }
+    }
+  }
+
   function removeMonsterAndTrapAt(x, y) {
     state.monsters = state.monsters.filter((m) => !(m.x === x && m.y === y));
     state.traps = state.traps.filter((t) => !(t.x === x && t.y === y));
@@ -445,6 +715,7 @@
 
     enforceValidDungeonRoute();
     updateCounts();
+    analyzeRooms();
     drawDungeon();
     screenHelp.textContent = "配置物を削除しました。";
     return true;
@@ -520,7 +791,9 @@
   }
 
   function rejectBlockedRoute() {
-    screenHelp.textContent = "入口から出口への通路が塞がるため、その配置はできません。";
+    const text = "入口から出口への通路が塞がるため、その配置はできません。";
+    screenHelp.textContent = text;
+    addMessage(text, "warning", true);
   }
 
   function repairEntranceToExitPath() {
@@ -652,6 +925,7 @@
 
     enforceValidDungeonRoute();
     updateCounts();
+    analyzeRooms();
     drawDungeon();
   }
 
@@ -691,11 +965,20 @@
   }
 
   function loop(now) {
+    let redraw = false;
+
     if (mode === "editor" && simulation && now - lastStepAt >= 420) {
       simulateStep();
-      drawDungeon();
       lastStepAt = now;
+      redraw = true;
     }
+
+    if (roomEffects.length > 0) {
+      roomEffects = roomEffects.filter((effect) => now - effect.startedAt <= effect.duration);
+      redraw = true;
+    }
+
+    if (redraw) drawDungeon();
     requestAnimationFrame(loop);
   }
 
@@ -713,6 +996,7 @@
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     screenHelp.textContent = "1Fの設計をブラウザに保存しました。";
+    addMessage("1Fの設計を保存しました。", "info");
   }
 
   function loadDungeon() {
@@ -749,10 +1033,13 @@
       updateSimulationButton();
       updateCounts();
       resetView();
+      analyzeRooms({ announce: false });
       drawDungeon();
       screenHelp.textContent = "保存した1Fを読み込みました。";
+      addMessage("保存した1Fを読み込みました。", "info");
     } catch {
       screenHelp.textContent = "保存データを読み込めませんでした。";
+      addMessage("保存データを読み込めませんでした。", "warning");
     }
   }
 
@@ -1054,6 +1341,7 @@
     screenHelp.textContent = simulation
       ? "モンスターが暫定ロジックで徘徊中。"
       : "徘徊テストを停止しました。";
+    addMessage(simulation ? "徘徊テストを開始しました。" : "徘徊テストを停止しました。", "info");
   });
 
   resetButton.addEventListener("click", () => {
@@ -1061,8 +1349,11 @@
     updateSimulationButton();
     makeInitialDungeon();
     resetView();
+    analyzeRooms({ announce: false });
+    roomEffects = [];
     drawDungeon();
     screenHelp.textContent = "1Fを初期状態に戻しました。";
+    addMessage("1Fを初期状態に戻しました。", "warning");
   });
 
   saveButton.addEventListener("click", saveDungeon);
