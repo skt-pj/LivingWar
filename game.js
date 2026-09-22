@@ -16,6 +16,8 @@
   const ROWS = 16;
   const SAVE_KEY = "livingwar:dungeon:v2";
   const MAX_ZOOM = 4;
+  const LONG_PRESS_MS = 350;
+  const DRAG_THRESHOLD = 7;
 
   const MONSTER_DEFS = {
     slime: {
@@ -82,6 +84,8 @@
 
   let pinch = null;
   let pan = null;
+  let longPressTimer = null;
+  let paintStroke = null;
 
   const state = {
     tiles: [],
@@ -521,11 +525,74 @@
     };
   }
 
+  function clearLongPressTimer() {
+    if (longPressTimer !== null) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  }
+
+  function paintLineTo(tile) {
+    if (!tile || simulation) return;
+
+    if (!paintStroke || !paintStroke.lastTile) {
+      placeAt(tile.x, tile.y);
+      paintStroke = { active: true, lastTile: tile };
+      return;
+    }
+
+    let x0 = paintStroke.lastTile.x;
+    let y0 = paintStroke.lastTile.y;
+    const x1 = tile.x;
+    const y1 = tile.y;
+    const dx = Math.abs(x1 - x0);
+    const sx = x0 < x1 ? 1 : -1;
+    const dy = -Math.abs(y1 - y0);
+    const sy = y0 < y1 ? 1 : -1;
+    let err = dx + dy;
+
+    while (true) {
+      if (x0 !== paintStroke.lastTile.x || y0 !== paintStroke.lastTile.y) {
+        placeAt(x0, y0);
+      }
+      if (x0 === x1 && y0 === y1) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) {
+        err += dy;
+        x0 += sx;
+      }
+      if (e2 <= dx) {
+        err += dx;
+        y0 += sy;
+      }
+    }
+
+    paintStroke.lastTile = tile;
+  }
+
+  function beginLongPressPlacement(clientX, clientY) {
+    clearLongPressTimer();
+    longPressTimer = setTimeout(() => {
+      longPressTimer = null;
+      if (mode !== "editor" || simulation || pinch || !pan || pan.moved) return;
+
+      paintStroke = { active: true, lastTile: null };
+      const tile = canvasToTile({ clientX, clientY });
+      if (tile) {
+        paintLineTo(tile);
+        screenHelp.textContent = "連続設置中。指を動かした軌跡に配置します。";
+      }
+      suppressClickUntil = Date.now() + 400;
+    }, LONG_PRESS_MS);
+  }
+
   viewport.addEventListener("touchstart", (event) => {
     if (mode !== "editor") return;
 
     if (event.touches.length === 2) {
       event.preventDefault();
+      clearLongPressTimer();
+      paintStroke = null;
       pan = null;
 
       const rect = viewport.getBoundingClientRect();
@@ -540,7 +607,7 @@
       return;
     }
 
-    if (event.touches.length === 1 && view.scale > 1) {
+    if (event.touches.length === 1) {
       const touch = event.touches[0];
       pan = {
         startX: touch.clientX,
@@ -549,6 +616,8 @@
         startOffsetY: view.offsetY,
         moved: false,
       };
+      paintStroke = null;
+      beginLongPressPlacement(touch.clientX, touch.clientY);
     }
   }, { passive: false });
 
@@ -557,6 +626,8 @@
 
     if (event.touches.length === 2 && pinch) {
       event.preventDefault();
+      clearLongPressTimer();
+      paintStroke = null;
       pan = null;
 
       const rect = viewport.getBoundingClientRect();
@@ -573,31 +644,56 @@
       return;
     }
 
-    if (event.touches.length === 1 && pan && view.scale > 1) {
-      const touch = event.touches[0];
-      const dx = touch.clientX - pan.startX;
-      const dy = touch.clientY - pan.startY;
+    if (event.touches.length !== 1) return;
 
-      if (!pan.moved && Math.hypot(dx, dy) < 6) return;
+    const touch = event.touches[0];
 
+    if (paintStroke && paintStroke.active) {
       event.preventDefault();
-      pan.moved = true;
+      const tile = canvasToTile(touch);
+      if (tile) paintLineTo(tile);
+      suppressClickUntil = Date.now() + 300;
+      return;
+    }
+
+    if (!pan) return;
+
+    const dx = touch.clientX - pan.startX;
+    const dy = touch.clientY - pan.startY;
+    if (!pan.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+
+    clearLongPressTimer();
+    pan.moved = true;
+    suppressClickUntil = Date.now() + 250;
+
+    if (view.scale > 1) {
+      event.preventDefault();
       view.offsetX = pan.startOffsetX + dx;
       view.offsetY = pan.startOffsetY + dy;
       clampView();
       applyViewTransform();
-      suppressClickUntil = Date.now() + 250;
     }
   }, { passive: false });
 
   viewport.addEventListener("touchend", (event) => {
     const didPan = Boolean(pan && pan.moved);
+    const didPaint = Boolean(paintStroke && paintStroke.active);
+
+    clearLongPressTimer();
 
     if (event.touches.length < 2) pinch = null;
+
     if (event.touches.length === 0) {
       pan = null;
-      if (didPan) suppressClickUntil = Date.now() + 250;
-    } else if (event.touches.length === 1 && view.scale > 1 && pinch === null) {
+      paintStroke = null;
+
+      if (didPaint) {
+        screenHelp.textContent = "連続設置を終了しました。";
+        suppressClickUntil = Date.now() + 350;
+      } else if (didPan) {
+        suppressClickUntil = Date.now() + 250;
+      }
+    } else if (event.touches.length === 1 && pinch === null) {
       const touch = event.touches[0];
       pan = {
         startX: touch.clientX,
@@ -606,12 +702,15 @@
         startOffsetY: view.offsetY,
         moved: false,
       };
+      paintStroke = null;
     }
   }, { passive: true });
 
   viewport.addEventListener("touchcancel", () => {
+    clearLongPressTimer();
     pinch = null;
     pan = null;
+    paintStroke = null;
     suppressClickUntil = Date.now() + 250;
   }, { passive: true });
 
