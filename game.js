@@ -160,7 +160,7 @@
 
   function updateSimulationButton() {
     simulateButton.textContent = simulation ? "徘徊テスト停止" : "徘徊テスト開始";
-    simState.textContent = simulation ? "稼働" : "停止";
+    simState.textContent = simulation ? "GBモード" : "停止";
   }
 
   function clearCanvas(color) {
@@ -191,7 +191,7 @@
   }
 
   function drawDungeon() {
-    clearCanvas(EDIT_COLORS.floor);
+    clearCanvas(simulation ? GB_COLORS.light : EDIT_COLORS.floor);
 
     for (let y = 0; y < ROWS; y++) {
       for (let x = 0; x < COLS; x++) {
@@ -209,24 +209,44 @@
     const px = x * TILE;
     const py = y * TILE;
 
-    if (type === "wall") {
-      ctx.fillStyle = EDIT_COLORS.wall;
-      ctx.fillRect(px, py, TILE, TILE);
-      ctx.fillStyle = EDIT_COLORS.wallTop;
-      ctx.fillRect(px + 2, py + 2, TILE - 4, 7);
-      ctx.fillStyle = EDIT_COLORS.wallDark;
-      ctx.fillRect(px + 2, py + TILE - 6, TILE - 4, 4);
-      ctx.fillRect(px + 2, py + 12, 10, 2);
-      ctx.fillRect(px + 18, py + 19, 11, 2);
+    if (simulation) {
+      if (type === "wall") {
+        ctx.fillStyle = GB_COLORS.darkMid;
+        ctx.fillRect(px, py, TILE, TILE);
+        ctx.fillStyle = GB_COLORS.dark;
+        ctx.fillRect(px, py, TILE, 6);
+        ctx.fillRect(px, py, 6, TILE);
+        ctx.fillStyle = GB_COLORS.lightMid;
+        ctx.fillRect(px + 8, py + 10, 16, 6);
+        ctx.fillRect(px + 16, py + 20, 16, 6);
+      } else {
+        ctx.fillStyle = (x + y) % 2 === 0 ? GB_COLORS.light : GB_COLORS.lightMid;
+        ctx.fillRect(px, py, TILE, TILE);
+        ctx.fillStyle = GB_COLORS.darkMid;
+        ctx.fillRect(px + 6, py + 8, 4, 4);
+        ctx.fillRect(px + 22, py + 21, 4, 4);
+      }
+      ctx.strokeStyle = GB_COLORS.darkMid;
     } else {
-      ctx.fillStyle = (x + y) % 2 === 0 ? EDIT_COLORS.floor : EDIT_COLORS.floorAlt;
-      ctx.fillRect(px, py, TILE, TILE);
-      ctx.fillStyle = "rgba(80, 65, 45, .12)";
-      ctx.fillRect(px + 6, py + 7, 3, 3);
-      ctx.fillRect(px + 22, py + 21, 3, 3);
+      if (type === "wall") {
+        ctx.fillStyle = EDIT_COLORS.wall;
+        ctx.fillRect(px, py, TILE, TILE);
+        ctx.fillStyle = EDIT_COLORS.wallTop;
+        ctx.fillRect(px + 2, py + 2, TILE - 4, 7);
+        ctx.fillStyle = EDIT_COLORS.wallDark;
+        ctx.fillRect(px + 2, py + TILE - 6, TILE - 4, 4);
+        ctx.fillRect(px + 2, py + 12, 10, 2);
+        ctx.fillRect(px + 18, py + 19, 11, 2);
+      } else {
+        ctx.fillStyle = (x + y) % 2 === 0 ? EDIT_COLORS.floor : EDIT_COLORS.floorAlt;
+        ctx.fillRect(px, py, TILE, TILE);
+        ctx.fillStyle = "rgba(80, 65, 45, .12)";
+        ctx.fillRect(px + 6, py + 7, 3, 3);
+        ctx.fillRect(px + 22, py + 21, 3, 3);
+      }
+      ctx.strokeStyle = EDIT_COLORS.grid;
     }
 
-    ctx.strokeStyle = EDIT_COLORS.grid;
     ctx.lineWidth = 1;
     ctx.strokeRect(px + 0.5, py + 0.5, TILE - 1, TILE - 1);
   }
@@ -234,11 +254,11 @@
   function drawEntrance(point) {
     const px = point.x * TILE;
     const py = point.y * TILE;
-    ctx.fillStyle = EDIT_COLORS.entrance;
+    ctx.fillStyle = simulation ? GB_COLORS.dark : EDIT_COLORS.entrance;
     ctx.fillRect(px + 6, py + 5, 20, 22);
-    ctx.fillStyle = EDIT_COLORS.entranceLight;
+    ctx.fillStyle = simulation ? GB_COLORS.light : EDIT_COLORS.entranceLight;
     ctx.fillRect(px + 10, py + 9, 12, 18);
-    ctx.fillStyle = EDIT_COLORS.white;
+    ctx.fillStyle = simulation ? GB_COLORS.darkMid : EDIT_COLORS.white;
     ctx.beginPath();
     ctx.moveTo(px + 12, py + 18);
     ctx.lineTo(px + 20, py + 13);
@@ -250,9 +270,9 @@
   function drawStairs(point) {
     const px = point.x * TILE;
     const py = point.y * TILE;
-    ctx.fillStyle = EDIT_COLORS.stairsDark;
+    ctx.fillStyle = simulation ? GB_COLORS.dark : EDIT_COLORS.stairsDark;
     ctx.fillRect(px + 5, py + 7, 22, 20);
-    ctx.fillStyle = EDIT_COLORS.stairs;
+    ctx.fillStyle = simulation ? GB_COLORS.lightMid : EDIT_COLORS.stairs;
     for (let i = 0; i < 4; i++) {
       ctx.fillRect(px + 7 + i * 3, py + 22 - i * 4, 18 - i * 3, 3);
     }
@@ -261,9 +281,9 @@
   function drawTrap(trap) {
     const px = trap.x * TILE;
     const py = trap.y * TILE;
-    ctx.fillStyle = EDIT_COLORS.trapDark;
+    ctx.fillStyle = simulation ? GB_COLORS.darkMid : EDIT_COLORS.trapDark;
     ctx.fillRect(px + 5, py + 24, 22, 3);
-    ctx.fillStyle = EDIT_COLORS.trap;
+    ctx.fillStyle = simulation ? GB_COLORS.dark : EDIT_COLORS.trap;
     for (let i = 0; i < 4; i++) {
       const bx = px + 5 + i * 6;
       ctx.beginPath();
@@ -283,32 +303,32 @@
   }
 
   function drawSlime(px, py) {
-    ctx.fillStyle = EDIT_COLORS.slimeDark;
+    ctx.fillStyle = simulation ? GB_COLORS.dark : EDIT_COLORS.slimeDark;
     ctx.beginPath();
     ctx.arc(px + 16, py + 18, 11, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillRect(px + 7, py + 17, 18, 9);
 
-    ctx.fillStyle = EDIT_COLORS.slime;
+    ctx.fillStyle = simulation ? GB_COLORS.darkMid : EDIT_COLORS.slime;
     ctx.beginPath();
     ctx.arc(px + 16, py + 17, 8, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = EDIT_COLORS.white;
+    ctx.fillStyle = simulation ? GB_COLORS.light : EDIT_COLORS.white;
     ctx.fillRect(px + 11, py + 15, 4, 4);
     ctx.fillRect(px + 18, py + 15, 4, 4);
   }
 
   function drawGoblin(px, py) {
-    ctx.fillStyle = EDIT_COLORS.goblinDark;
+    ctx.fillStyle = simulation ? GB_COLORS.dark : EDIT_COLORS.goblinDark;
     ctx.fillRect(px + 8, py + 7, 16, 19);
     ctx.fillRect(px + 4, py + 11, 6, 7);
     ctx.fillRect(px + 22, py + 11, 6, 7);
 
-    ctx.fillStyle = EDIT_COLORS.goblin;
+    ctx.fillStyle = simulation ? GB_COLORS.darkMid : EDIT_COLORS.goblin;
     ctx.fillRect(px + 10, py + 9, 12, 15);
 
-    ctx.fillStyle = EDIT_COLORS.white;
+    ctx.fillStyle = simulation ? GB_COLORS.light : EDIT_COLORS.white;
     ctx.fillRect(px + 11, py + 13, 4, 4);
     ctx.fillRect(px + 18, py + 13, 4, 4);
   }
