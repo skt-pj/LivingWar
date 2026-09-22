@@ -139,6 +139,7 @@
     mode = next;
     if (mode === "start") {
       simulation = false;
+      roomDrag = null;
       closeEditorMenu();
       historyPanel.classList.add("hidden");
       startPanel.classList.remove("hidden");
@@ -1564,6 +1565,7 @@
       event.preventDefault();
       clearLongPressTimer();
       paintStroke = null;
+      roomDrag = null;
       placementPreviewTile = null;
       pan = null;
 
