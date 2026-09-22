@@ -19,6 +19,7 @@
   const LONG_PRESS_MS = 350;
   const DRAG_THRESHOLD = 7;
   const DOUBLE_TAP_MS = 300;
+  const TOUCH_PLACEMENT_OFFSET_PX = 54;
 
   const MONSTER_DEFS = {
     slime: {
@@ -89,6 +90,7 @@
   let paintStroke = null;
   let pendingTapTimer = null;
   let pendingTap = null;
+  let placementPreviewTile = null;
 
   const state = {
     tiles: [],
@@ -225,6 +227,7 @@
     if (state.stairs) drawStairs(state.stairs);
     state.traps.forEach(drawTrap);
     state.monsters.forEach(drawMonster);
+    drawPlacementPreview();
   }
 
   function drawHud() {
@@ -318,6 +321,73 @@
     ctx.fillRect(px + 5, py + 3, 1, 1);
     ctx.fillStyle = GB_COLORS.lightMid;
     ctx.fillRect(px + 3, py + 5, 2, 1);
+  }
+
+  function drawPlacementPreview() {
+    if (!placementPreviewTile || mode !== "editor" || simulation) return;
+
+    const { x, y } = placementPreviewTile;
+    const px = x * TILE;
+    const py = HUD_H + y * TILE;
+
+    if (selectedTool === "wall") {
+      ctx.fillStyle = GB_COLORS.darkMid;
+      ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
+      ctx.fillStyle = GB_COLORS.dark;
+      ctx.fillRect(px + 1, py + 1, TILE - 2, 2);
+    } else if (selectedTool === "floor") {
+      ctx.fillStyle = GB_COLORS.light;
+      ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
+    } else if (selectedTool === "erase") {
+      ctx.fillStyle = GB_COLORS.dark;
+      for (let i = 1; i < TILE - 1; i++) {
+        ctx.fillRect(px + i, py + i, 1, 1);
+        ctx.fillRect(px + TILE - 1 - i, py + i, 1, 1);
+      }
+    } else if (selectedTool === "entrance") {
+      drawEntrance({ x, y });
+    } else if (selectedTool === "stairs") {
+      drawStairs({ x, y });
+    } else if (selectedTool === "trap") {
+      drawTrap({ x, y, type: "spike" });
+    } else if (selectedTool === "slime") {
+      drawSlime(px, py);
+    } else if (selectedTool === "goblin") {
+      drawGoblin(px, py);
+    }
+
+    ctx.strokeStyle = GB_COLORS.dark;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px + 0.5, py + 0.5, TILE - 1, TILE - 1);
+    ctx.fillStyle = GB_COLORS.light;
+    ctx.fillRect(px, py, 2, 1);
+    ctx.fillRect(px, py, 1, 2);
+    ctx.fillRect(px + TILE - 2, py, 2, 1);
+    ctx.fillRect(px + TILE - 1, py, 1, 2);
+    ctx.fillRect(px, py + TILE - 1, 2, 1);
+    ctx.fillRect(px, py + TILE - 2, 1, 2);
+    ctx.fillRect(px + TILE - 2, py + TILE - 1, 2, 1);
+    ctx.fillRect(px + TILE - 1, py + TILE - 2, 1, 2);
+  }
+
+  function placementTileFromTouch(touch) {
+    const offsets = [
+      TOUCH_PLACEMENT_OFFSET_PX,
+      42,
+      30,
+      18,
+      0,
+    ];
+
+    for (const offset of offsets) {
+      const tile = canvasToTile({
+        clientX: touch.clientX,
+        clientY: touch.clientY - offset,
+      });
+      if (tile) return tile;
+    }
+
+    return null;
   }
 
   function canvasToTile(event) {
@@ -768,10 +838,14 @@
       if (mode !== "editor" || simulation || pinch || !pan || pan.moved) return;
 
       paintStroke = { active: true, lastTile: null };
-      const tile = canvasToTile({ clientX, clientY });
+      const tile = placementTileFromTouch({ clientX, clientY });
+      placementPreviewTile = tile;
+
       if (tile) {
         paintLineTo(tile);
-        screenHelp.textContent = "連続設置中。指を動かした軌跡に配置します。";
+        screenHelp.textContent = "連続設置中。指の上に表示されたカーソル位置へ配置します。";
+      } else {
+        drawDungeon();
       }
       suppressClickUntil = Date.now() + 400;
     }, LONG_PRESS_MS);
@@ -784,6 +858,7 @@
       event.preventDefault();
       clearLongPressTimer();
       paintStroke = null;
+      placementPreviewTile = null;
       pan = null;
 
       const rect = viewport.getBoundingClientRect();
@@ -820,6 +895,7 @@
       event.preventDefault();
       clearLongPressTimer();
       paintStroke = null;
+      placementPreviewTile = null;
       pan = null;
 
       const rect = viewport.getBoundingClientRect();
@@ -842,8 +918,13 @@
 
     if (paintStroke && paintStroke.active) {
       event.preventDefault();
-      const tile = canvasToTile(touch);
-      if (tile) paintLineTo(tile);
+      const tile = placementTileFromTouch(touch);
+      placementPreviewTile = tile;
+      if (tile) {
+        paintLineTo(tile);
+      } else {
+        drawDungeon();
+      }
       suppressClickUntil = Date.now() + 300;
       return;
     }
@@ -880,8 +961,10 @@
     if (event.touches.length === 0) {
       pan = null;
       paintStroke = null;
+      placementPreviewTile = null;
 
       if (didPaint) {
+        drawDungeon();
         screenHelp.textContent = "連続設置を終了しました。";
         suppressClickUntil = Date.now() + 500;
       } else if (didPan) {
@@ -910,6 +993,8 @@
     pinch = null;
     pan = null;
     paintStroke = null;
+    placementPreviewTile = null;
+    drawDungeon();
     suppressClickUntil = Date.now() + 250;
   }, { passive: true });
 
