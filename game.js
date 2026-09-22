@@ -101,6 +101,7 @@
   };
 
   let pinch = null;
+  let pan = null;
 
   const state = {
     tiles: [],
@@ -519,42 +520,97 @@
   }
 
   viewport.addEventListener("touchstart", (event) => {
-    if (mode !== "editor" || event.touches.length !== 2) return;
+    if (mode !== "editor") return;
 
-    event.preventDefault();
-    const rect = viewport.getBoundingClientRect();
-    const mid = touchMidpoint(event.touches[0], event.touches[1], rect);
-    pinch = {
-      startDistance: touchDistance(event.touches[0], event.touches[1]),
-      startScale: view.scale,
-      worldX: (mid.x - view.offsetX) / view.scale,
-      worldY: (mid.y - view.offsetY) / view.scale,
-    };
-    suppressClickUntil = Date.now() + 350;
+    if (event.touches.length === 2) {
+      event.preventDefault();
+      pan = null;
+
+      const rect = viewport.getBoundingClientRect();
+      const mid = touchMidpoint(event.touches[0], event.touches[1], rect);
+      pinch = {
+        startDistance: touchDistance(event.touches[0], event.touches[1]),
+        startScale: view.scale,
+        worldX: (mid.x - view.offsetX) / view.scale,
+        worldY: (mid.y - view.offsetY) / view.scale,
+      };
+      suppressClickUntil = Date.now() + 350;
+      return;
+    }
+
+    if (event.touches.length === 1 && view.scale > 1) {
+      const touch = event.touches[0];
+      pan = {
+        startX: touch.clientX,
+        startY: touch.clientY,
+        startOffsetX: view.offsetX,
+        startOffsetY: view.offsetY,
+        moved: false,
+      };
+    }
   }, { passive: false });
 
   viewport.addEventListener("touchmove", (event) => {
-    if (mode !== "editor" || event.touches.length !== 2 || !pinch) return;
+    if (mode !== "editor") return;
 
-    event.preventDefault();
-    const rect = viewport.getBoundingClientRect();
-    const mid = touchMidpoint(event.touches[0], event.touches[1], rect);
-    const distance = touchDistance(event.touches[0], event.touches[1]);
-    const nextScale = Math.max(1, Math.min(MAX_ZOOM, pinch.startScale * (distance / pinch.startDistance)));
+    if (event.touches.length === 2 && pinch) {
+      event.preventDefault();
+      pan = null;
 
-    view.scale = nextScale;
-    view.offsetX = mid.x - pinch.worldX * nextScale;
-    view.offsetY = mid.y - pinch.worldY * nextScale;
-    clampView();
-    applyViewTransform();
-    suppressClickUntil = Date.now() + 350;
+      const rect = viewport.getBoundingClientRect();
+      const mid = touchMidpoint(event.touches[0], event.touches[1], rect);
+      const distance = touchDistance(event.touches[0], event.touches[1]);
+      const nextScale = Math.max(1, Math.min(MAX_ZOOM, pinch.startScale * (distance / pinch.startDistance)));
+
+      view.scale = nextScale;
+      view.offsetX = mid.x - pinch.worldX * nextScale;
+      view.offsetY = mid.y - pinch.worldY * nextScale;
+      clampView();
+      applyViewTransform();
+      suppressClickUntil = Date.now() + 350;
+      return;
+    }
+
+    if (event.touches.length === 1 && pan && view.scale > 1) {
+      const touch = event.touches[0];
+      const dx = touch.clientX - pan.startX;
+      const dy = touch.clientY - pan.startY;
+
+      if (!pan.moved && Math.hypot(dx, dy) < 6) return;
+
+      event.preventDefault();
+      pan.moved = true;
+      view.offsetX = pan.startOffsetX + dx;
+      view.offsetY = pan.startOffsetY + dy;
+      clampView();
+      applyViewTransform();
+      suppressClickUntil = Date.now() + 250;
+    }
   }, { passive: false });
 
   viewport.addEventListener("touchend", (event) => {
-    if (event.touches.length < 2) {
-      pinch = null;
-      suppressClickUntil = Date.now() + 250;
+    const didPan = Boolean(pan && pan.moved);
+
+    if (event.touches.length < 2) pinch = null;
+    if (event.touches.length === 0) {
+      pan = null;
+      if (didPan) suppressClickUntil = Date.now() + 250;
+    } else if (event.touches.length === 1 && view.scale > 1 && pinch === null) {
+      const touch = event.touches[0];
+      pan = {
+        startX: touch.clientX,
+        startY: touch.clientY,
+        startOffsetX: view.offsetX,
+        startOffsetY: view.offsetY,
+        moved: false,
+      };
     }
+  }, { passive: true });
+
+  viewport.addEventListener("touchcancel", () => {
+    pinch = null;
+    pan = null;
+    suppressClickUntil = Date.now() + 250;
   }, { passive: true });
 
   viewport.addEventListener("wheel", (event) => {
