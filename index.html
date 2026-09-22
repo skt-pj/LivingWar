@@ -2,17 +2,22 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <title>LivingWar - 魔王軍プロトタイプ</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <main class="app-shell">
     <section class="screen-column">
-      <div class="screen-frame" aria-label="Game Boy style game screen">
-        <canvas id="game" width="160" height="144"></canvas>
+      <div class="screen-frame" aria-label="Dungeon editor">
+        <div class="canvas-viewport" id="canvasViewport">
+          <canvas id="game" width="640" height="512"></canvas>
+        </div>
       </div>
-      <div class="screen-help" id="screenHelp">軍勢を選択してください。</div>
+      <div class="screen-toolbar">
+        <div class="screen-help" id="screenHelp">軍勢を選択してください。</div>
+        <button id="zoomResetButton" class="small-button hidden" type="button">表示を戻す</button>
+      </div>
     </section>
 
     <aside class="panel" id="panel">
@@ -20,7 +25,7 @@
         <h1>LivingWar</h1>
         <p>軍勢を選択</p>
         <button class="menu-button disabled" id="heroButton" type="button">勇者軍</button>
-        <button class="menu-button" id="maouButton" type="button">魔王軍</button>
+        <button class="menu-button primary" id="maouButton" type="button">魔王軍</button>
         <p class="note">今回は魔王軍のみ実装。</p>
       </div>
 
@@ -28,7 +33,7 @@
         <div class="panel-head">
           <div>
             <h1>ダンジョン製作</h1>
-            <p>1F / 10×8マス</p>
+            <p>1F / 20×16マス</p>
           </div>
           <button id="backButton" class="small-button" type="button">戻る</button>
         </div>
@@ -46,8 +51,14 @@
           <button class="tool-button" data-tool="erase" type="button">消去</button>
         </div>
 
+        <h2>設備</h2>
+        <div class="tool-grid two-column">
+          <button class="tool-button" data-tool="entrance" type="button">入口</button>
+          <button class="tool-button" data-tool="stairs" type="button">次の階段</button>
+        </div>
+
         <h2>モンスター</h2>
-        <div class="tool-grid">
+        <div class="tool-grid two-column">
           <button class="tool-button" data-tool="slime" type="button">スライム</button>
           <button class="tool-button" data-tool="goblin" type="button">ゴブリン</button>
         </div>
@@ -60,15 +71,15 @@
         <div class="info-card" id="toolInfo"></div>
 
         <div class="action-row">
-          <button id="simulateButton" class="menu-button compact" type="button">徘徊テスト開始</button>
-          <button id="resetButton" class="menu-button compact secondary" type="button">初期化</button>
+          <button id="simulateButton" class="menu-button compact primary" type="button">徘徊テスト開始</button>
+          <button id="resetButton" class="menu-button compact" type="button">初期化</button>
         </div>
         <div class="action-row">
-          <button id="saveButton" class="menu-button compact secondary" type="button">設計保存</button>
-          <button id="loadButton" class="menu-button compact secondary" type="button">設計読込</button>
+          <button id="saveButton" class="menu-button compact" type="button">設計保存</button>
+          <button id="loadButton" class="menu-button compact" type="button">設計読込</button>
         </div>
 
-        <p class="note">モンスターのレベル・ドロップ・進化条件は定義データから差し替え可能。進化条件は未指定のため今回は発動しません。</p>
+        <p class="note">ダンジョン製作は通常表示。ピンチ操作で拡大・縮小と位置調整ができます。バトル画面はGBモードで実装する前提です。</p>
       </div>
     </aside>
   </main>
