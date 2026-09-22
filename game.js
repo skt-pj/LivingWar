@@ -38,7 +38,7 @@
 
   const TOOL_INFO = {
     floor: "床\n歩行可能なマスです。",
-    wall: "壁\n移動不可。配置済みのモンスター・罠・設備も消去します。",
+    wall: "壁\n移動不可。入口から出口（階段）への通路を塞ぐ配置はできません。モンスター・罠は通路判定に含みません。",
     erase: "消去\nモンスター・罠・設備を消し、床に戻します。",
     entrance: "入口\n勇者が1Fへ侵入する開始地点です。1Fに1か所だけ置けます。",
     stairs: "次の階段\n次の階へ進む地点です。1Fに1か所だけ置けます。",
@@ -332,50 +332,110 @@
     return { x: tileX, y: tileY };
   }
 
+  const DIRS = [
+    { x: 0, y: -1 },
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+    { x: -1, y: 0 },
+  ];
+
   function samePoint(point, x, y) {
     return point && point.x === x && point.y === y;
   }
 
-  function removeEntitiesAt(x, y) {
+  function removeMonsterAndTrapAt(x, y) {
     state.monsters = state.monsters.filter((m) => !(m.x === x && m.y === y));
     state.traps = state.traps.filter((t) => !(t.x === x && t.y === y));
-    if (samePoint(state.entrance, x, y)) state.entrance = null;
-    if (samePoint(state.stairs, x, y)) state.stairs = null;
   }
 
-  function isAnchorAt(x, y) {
-    return samePoint(state.entrance, x, y) || samePoint(state.stairs, x, y);
+  function hasEntranceToExitPath(entrance = state.entrance, stairs = state.stairs) {
+    if (!entrance || !stairs) return false;
+    if (samePoint(entrance, stairs.x, stairs.y)) return false;
+    if (state.tiles[entrance.y]?.[entrance.x] !== "floor") return false;
+    if (state.tiles[stairs.y]?.[stairs.x] !== "floor") return false;
+
+    const queue = [entrance];
+    const visited = new Set([`${entrance.x},${entrance.y}`]);
+
+    for (let index = 0; index < queue.length; index++) {
+      const current = queue[index];
+      if (samePoint(stairs, current.x, current.y)) return true;
+
+      for (const dir of DIRS) {
+        const nx = current.x + dir.x;
+        const ny = current.y + dir.y;
+        if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) continue;
+        if (state.tiles[ny][nx] !== "floor") continue;
+
+        const key = `${nx},${ny}`;
+        if (visited.has(key)) continue;
+        visited.add(key);
+        queue.push({ x: nx, y: ny });
+      }
+    }
+
+    return false;
+  }
+
+  function rejectBlockedRoute() {
+    screenHelp.textContent = "入口から出口への通路が塞がるため、その配置はできません。";
   }
 
   function placeAt(x, y) {
     if (simulation) return;
 
     if (selectedTool === "wall") {
+      if (samePoint(state.entrance, x, y) || samePoint(state.stairs, x, y)) {
+        rejectBlockedRoute();
+        return;
+      }
+
+      const previousTile = state.tiles[y][x];
       state.tiles[y][x] = "wall";
-      removeEntitiesAt(x, y);
+
+      if (!hasEntranceToExitPath()) {
+        state.tiles[y][x] = previousTile;
+        rejectBlockedRoute();
+        drawDungeon();
+        return;
+      }
+
+      removeMonsterAndTrapAt(x, y);
     } else if (selectedTool === "floor") {
       state.tiles[y][x] = "floor";
     } else if (selectedTool === "erase") {
       state.tiles[y][x] = "floor";
-      removeEntitiesAt(x, y);
+      removeMonsterAndTrapAt(x, y);
     } else if (selectedTool === "entrance") {
-      if (state.tiles[y][x] !== "floor") return;
+      if (state.tiles[y][x] !== "floor" || samePoint(state.stairs, x, y)) return;
+
+      const previousEntrance = state.entrance;
       state.entrance = { x, y };
-      if (samePoint(state.stairs, x, y)) state.stairs = null;
-      state.monsters = state.monsters.filter((m) => !(m.x === x && m.y === y));
-      state.traps = state.traps.filter((t) => !(t.x === x && t.y === y));
+
+      if (!hasEntranceToExitPath()) {
+        state.entrance = previousEntrance;
+        rejectBlockedRoute();
+        drawDungeon();
+        return;
+      }
     } else if (selectedTool === "stairs") {
-      if (state.tiles[y][x] !== "floor") return;
+      if (state.tiles[y][x] !== "floor" || samePoint(state.entrance, x, y)) return;
+
+      const previousStairs = state.stairs;
       state.stairs = { x, y };
-      if (samePoint(state.entrance, x, y)) state.entrance = null;
-      state.monsters = state.monsters.filter((m) => !(m.x === x && m.y === y));
-      state.traps = state.traps.filter((t) => !(t.x === x && t.y === y));
+
+      if (!hasEntranceToExitPath()) {
+        state.stairs = previousStairs;
+        rejectBlockedRoute();
+        drawDungeon();
+        return;
+      }
     } else if (selectedTool === "trap") {
-      if (state.tiles[y][x] !== "floor" || isAnchorAt(x, y)) return;
+      if (state.tiles[y][x] !== "floor") return;
       state.traps = state.traps.filter((t) => !(t.x === x && t.y === y));
       state.traps.push({ x, y, type: "spike" });
     } else if (selectedTool === "slime" || selectedTool === "goblin") {
-      if (state.tiles[y][x] !== "floor" || isAnchorAt(x, y)) return;
+      if (state.tiles[y][x] !== "floor") return;
       state.monsters = state.monsters.filter((m) => !(m.x === x && m.y === y));
       state.monsters.push({
         id: nextMonsterId++,
@@ -390,13 +450,6 @@
     updateCounts();
     drawDungeon();
   }
-
-  const DIRS = [
-    { x: 0, y: -1 },
-    { x: 1, y: 0 },
-    { x: 0, y: 1 },
-    { x: -1, y: 0 },
-  ];
 
   function canMoveTo(monster, x, y, occupied) {
     if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return false;
@@ -483,6 +536,10 @@
       state.entrance = data.entrance || null;
       state.stairs = data.stairs || null;
       nextMonsterId = Number.isInteger(data.nextMonsterId) ? data.nextMonsterId : state.monsters.length + 1;
+
+      if (!hasEntranceToExitPath()) {
+        throw new Error("blocked entrance-to-exit route");
+      }
 
       simulation = false;
       updateSimulationButton();
