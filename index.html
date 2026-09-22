@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <meta name="theme-color" content="#0b0d12" />
   <title>LivingWar - 魔王軍ダンジョン製作</title>
-  <link rel="stylesheet" href="styles.css?v=save13" />
+  <link rel="stylesheet" href="styles.css?v=menu14" />
 </head>
 <body>
   <main class="app-shell">
@@ -71,7 +71,16 @@
             <div class="eyebrow">DUNGEON BUILD</div>
             <h1>ダンジョン製作</h1>
           </div>
-          <button id="backButton" class="icon-button" type="button" aria-label="軍勢選択へ戻る">←</button>
+          <div class="editor-topbar-actions">
+            <button id="menuButton" class="icon-button" type="button" aria-label="メニューを開く" aria-expanded="false">☰</button>
+            <button id="backButton" class="icon-button" type="button" aria-label="軍勢選択へ戻る">←</button>
+          </div>
+          <div id="editorMenu" class="editor-menu hidden">
+            <button id="openHistoryButton" class="editor-menu-item" type="button">
+              <span aria-hidden="true">≡</span>
+              <span>履歴</span>
+            </button>
+          </div>
         </div>
 
         <div class="status-strip" aria-label="ダンジョン状態">
@@ -159,14 +168,6 @@
 
         <div class="info-card" id="toolInfo"></div>
 
-        <section class="message-window" aria-label="メッセージ履歴">
-          <div class="message-window-head">
-            <span>メッセージ</span>
-            <small>MESSAGE LOG</small>
-          </div>
-          <div class="message-log" id="messageLog" role="log" aria-live="polite" aria-relevant="additions"></div>
-        </section>
-
         <div class="primary-actions">
           <button id="simulateButton" class="game-action primary" type="button">
             <span aria-hidden="true">▶</span>
@@ -229,6 +230,19 @@
     </aside>
   </main>
 
-  <script src="game.js?v=save13"></script>
+  <section id="historyPanel" class="history-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
+    <div class="history-dialog">
+      <div class="history-dialog-head">
+        <div>
+          <span class="eyebrow">MESSAGE LOG</span>
+          <h2 id="historyTitle">履歴</h2>
+        </div>
+        <button id="closeHistoryButton" class="icon-button" type="button" aria-label="履歴を閉じる">×</button>
+      </div>
+      <div class="message-log history-message-log" id="messageLog" role="log" aria-live="polite" aria-relevant="additions"></div>
+    </div>
+  </section>
+
+  <script src="game.js?v=menu14"></script>
 </body>
 </html>
