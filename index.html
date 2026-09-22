@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <meta name="theme-color" content="#0b0d12" />
   <title>LivingWar - 魔王軍ダンジョン製作</title>
-  <link rel="stylesheet" href="styles.css?v=menu14" />
+  <link rel="stylesheet" href="styles.css?v=roomdrag15" />
 </head>
 <body>
   <main class="app-shell">
@@ -103,7 +103,11 @@
             <span>地形</span>
             <small>TERRAIN</small>
           </div>
-          <div class="tool-grid">
+          <div class="tool-grid terrain-grid">
+            <button class="tool-button room-tool" data-tool="room" type="button">
+              <span class="tool-icon room-icon" aria-hidden="true"></span>
+              <span>部屋</span>
+            </button>
             <button class="tool-button active" data-tool="floor" type="button">
               <span class="tool-icon floor-icon" aria-hidden="true"></span>
               <span>床</span>
@@ -243,6 +247,6 @@
     </div>
   </section>
 
-  <script src="game.js?v=menu14"></script>
+  <script src="game.js?v=roomdrag15"></script>
 </body>
 </html>
