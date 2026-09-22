@@ -859,6 +859,7 @@
       clearLongPressTimer();
       paintStroke = null;
       placementPreviewTile = null;
+      drawDungeon();
       pan = null;
 
       const rect = viewport.getBoundingClientRect();
