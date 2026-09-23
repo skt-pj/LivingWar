@@ -127,6 +127,17 @@
   const closeDexButton = document.getElementById("closeDexButton");
   const dexList = document.getElementById("dexList");
   const dexProgress = document.getElementById("dexProgress");
+  const dexDetailNumber = document.getElementById("dexDetailNumber");
+  const dexDetailName = document.getElementById("dexDetailName");
+  const dexDetailTags = document.getElementById("dexDetailTags");
+  const dexLocked = document.getElementById("dexLocked");
+  const dexKnown = document.getElementById("dexKnown");
+  const dexStats = document.getElementById("dexStats");
+  const dexSpawn = document.getElementById("dexSpawn");
+  const dexMovement = document.getElementById("dexMovement");
+  const dexLevel = document.getElementById("dexLevel");
+  const dexComment = document.getElementById("dexComment");
+  const dexSprite = document.getElementById("dexSprite");
   const simulateButton = document.getElementById("simulateButton");
   const resetButton = document.getElementById("resetButton");
   const saveButton = document.getElementById("saveButton");
@@ -172,6 +183,7 @@
   let lastMessageText = "";
   let lastMessageAt = 0;
   let savePanelMode = "save";
+  let selectedDexType = "slime";
   const discoveredMonsters = new Set();
 
   const state = {
@@ -331,6 +343,7 @@
     } catch {
       // 図鑑解放自体はゲーム進行を止めない。
     }
+    if (!dexPanel.classList.contains("hidden")) selectedDexType = type;
     renderDex();
     addMessage(`図鑑に「${def.name}」が登録されました。`, "info", true);
   }
@@ -354,42 +367,161 @@
     return Object.values(SPAWNER_DEFS).find((def) => def.monsterType === type) || null;
   }
 
+  function dexTypes() {
+    return Object.keys(MONSTER_DEFS)
+      .filter((type) => !MONSTER_DEFS[type].legacy)
+      .sort((a, b) => MONSTER_DEFS[a].dexNo - MONSTER_DEFS[b].dexNo);
+  }
+
+  function drawDexSprite(type, discovered) {
+    if (!dexSprite) return;
+    const spriteCtx = dexSprite.getContext("2d");
+    spriteCtx.imageSmoothingEnabled = false;
+    spriteCtx.fillStyle = GB_COLORS.light;
+    spriteCtx.fillRect(0, 0, dexSprite.width, dexSprite.height);
+
+    const sprites = {
+      slime: [
+        "00000000",
+        "00000000",
+        "00111100",
+        "01111110",
+        "11111111",
+        "11211211",
+        "11111111",
+        "01111110",
+      ],
+      redSlime: [
+        "00000000",
+        "00000000",
+        "00133100",
+        "01111110",
+        "11111111",
+        "11211211",
+        "11133111",
+        "01111110",
+      ],
+      hardSlime: [
+        "00000000",
+        "00111100",
+        "01111110",
+        "11111111",
+        "11211211",
+        "11111111",
+        "11111111",
+        "01111110",
+      ],
+    };
+
+    const sprite = sprites[type] || sprites.slime;
+    const scale = 7;
+    const width = sprite[0].length * scale;
+    const height = sprite.length * scale;
+    const startX = Math.floor((dexSprite.width - width) / 2);
+    const startY = Math.floor((dexSprite.height - height) / 2);
+
+    for (let y = 0; y < sprite.length; y++) {
+      for (let x = 0; x < sprite[y].length; x++) {
+        const pixel = sprite[y][x];
+        if (pixel === "0") continue;
+
+        if (!discovered) {
+          spriteCtx.fillStyle = GB_COLORS.darkMid;
+        } else if (pixel === "2") {
+          spriteCtx.fillStyle = GB_COLORS.light;
+        } else if (pixel === "3") {
+          spriteCtx.fillStyle = GB_COLORS.darkMid;
+        } else {
+          spriteCtx.fillStyle = GB_COLORS.dark;
+        }
+
+        spriteCtx.fillRect(startX + x * scale, startY + y * scale, scale, scale);
+      }
+    }
+  }
+
+  function renderDexDetail(type) {
+    const def = MONSTER_DEFS[type];
+    if (!def) return;
+
+    const discovered = discoveredMonsters.has(type);
+    const source = spawnerForMonster(type);
+    dexDetailNumber.textContent = `No.${String(def.dexNo).padStart(3, "0")}`;
+    dexDetailName.textContent = discovered ? def.name : "???";
+
+    dexDetailTags.replaceChildren();
+    const tags = discovered ? [def.family, `SIZE ${def.size}`] : ["未発見"];
+    tags.forEach((textValue) => {
+      const tag = document.createElement("span");
+      tag.className = "dex-tag";
+      tag.textContent = textValue;
+      dexDetailTags.appendChild(tag);
+    });
+
+    drawDexSprite(type, discovered);
+    dexLocked.classList.toggle("hidden", discovered);
+    dexKnown.classList.toggle("hidden", !discovered);
+
+    if (!discovered) return;
+
+    const statLabels = [
+      ["HP", "hp"],
+      ["ATK", "attack"],
+      ["DEF", "defense"],
+      ["SPD", "speed"],
+    ];
+    const allDefs = dexTypes().map((monsterType) => MONSTER_DEFS[monsterType]);
+    dexStats.replaceChildren();
+
+    for (const [label, key] of statLabels) {
+      const max = Math.max(...allDefs.map((monsterDef) => monsterDef.stats[key]), 1);
+      const value = def.stats[key];
+      const row = document.createElement("div");
+      row.className = "dex-stat";
+      row.innerHTML = `
+        <span class="dex-stat-label">${label}</span>
+        <strong class="dex-stat-value">${value}</strong>
+        <span class="dex-stat-track"><span class="dex-stat-fill" style="width:${Math.max(8, Math.round((value / max) * 100))}%"></span></span>
+      `;
+      dexStats.appendChild(row);
+    }
+
+    dexSpawn.textContent = source
+      ? `${source.name} / 1回${source.batchSize}体 / 同時${source.activeLimit}体まで`
+      : "出現源不明";
+    dexMovement.textContent = movementText(def);
+    dexLevel.textContent = `${def.levelRange[0]}〜${def.levelRange[1]}`;
+    dexComment.textContent = def.dexText;
+  }
+
   function renderDex() {
     if (!dexList || !dexProgress) return;
-    const types = Object.keys(MONSTER_DEFS).filter((type) => !MONSTER_DEFS[type].legacy);
-    dexProgress.textContent = `発見 ${types.filter((type) => discoveredMonsters.has(type)).length} / ${types.length}`;
+    const types = dexTypes();
+    if (!types.includes(selectedDexType)) selectedDexType = types[0] || null;
 
+    dexProgress.textContent = `発見 ${types.filter((type) => discoveredMonsters.has(type)).length} / ${types.length}`;
     dexList.replaceChildren();
+
     for (const type of types) {
       const def = MONSTER_DEFS[type];
       const discovered = discoveredMonsters.has(type);
-      const entry = document.createElement("article");
-      entry.className = `dex-entry${discovered ? "" : " dex-entry--locked"}`;
-
-      const side = document.createElement("div");
-      side.innerHTML = `<div class="dex-number">No.${String(def.dexNo).padStart(3, "0")}</div><div class="dex-name">${discovered ? def.name : "???"}</div><div class="dex-family">${discovered ? `${def.family} / SIZE ${def.size}` : "未発見"}</div>`;
-
-      const body = document.createElement("div");
-      if (!discovered) {
-        body.innerHTML = '<div class="dex-locked-copy">まだ実物を確認していない。魔王軍のくせに報告が遅い。</div>';
-      } else {
-        const source = spawnerForMonster(type);
-        const spawnText = source ? `${source.name} / 1回${source.batchSize}体 / 同時${source.activeLimit}体` : "出現源不明";
-        body.innerHTML = `
-          <div class="dex-stats">
-            <div class="dex-stat"><span>HP</span><strong>${def.stats.hp}</strong></div>
-            <div class="dex-stat"><span>ATK</span><strong>${def.stats.attack}</strong></div>
-            <div class="dex-stat"><span>DEF</span><strong>${def.stats.defense}</strong></div>
-            <div class="dex-stat"><span>SPD</span><strong>${def.stats.speed}</strong></div>
-          </div>
-          <div class="dex-meta">Lv ${def.levelRange[0]}〜${def.levelRange[1]}<br>出現：${spawnText}<br>移動：${movementText(def)}</div>
-          <div class="dex-comment">${def.dexText}</div>
-        `;
-      }
-
-      entry.append(side, body);
-      dexList.appendChild(entry);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `dex-list-button${type === selectedDexType ? " active" : ""}${discovered ? "" : " dex-list-button--locked"}`;
+      button.dataset.dexType = type;
+      button.setAttribute("aria-pressed", String(type === selectedDexType));
+      button.innerHTML = `
+        <span class="dex-list-number">No.${String(def.dexNo).padStart(3, "0")}</span>
+        <span>
+          <span class="dex-list-name">${discovered ? def.name : "???"}</span>
+          <span class="dex-list-sub">${discovered ? `${def.family} · SIZE ${def.size}` : "未発見"}</span>
+        </span>
+        <span class="dex-list-arrow" aria-hidden="true">›</span>
+      `;
+      dexList.appendChild(button);
     }
+
+    if (selectedDexType) renderDexDetail(selectedDexType);
   }
 
   function openDexPanel() {
@@ -2120,12 +2252,33 @@
   openDexButton.addEventListener("click", openDexPanel);
   closeDexButton.addEventListener("click", closeDexPanel);
 
+  dexList.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-dex-type]");
+    if (!button) return;
+    const type = button.dataset.dexType;
+    if (!MONSTER_DEFS[type] || MONSTER_DEFS[type].legacy) return;
+    selectedDexType = type;
+    renderDex();
+  });
+
   historyPanel.addEventListener("click", (event) => {
     if (event.target === historyPanel) closeHistoryPanel();
   });
 
   dexPanel.addEventListener("click", (event) => {
     if (event.target === dexPanel) closeDexPanel();
+  });
+
+  dexPanel.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown" && event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    const types = dexTypes();
+    const currentIndex = Math.max(0, types.indexOf(selectedDexType));
+    const delta = event.key === "ArrowUp" || event.key === "ArrowLeft" ? -1 : 1;
+    selectedDexType = types[(currentIndex + delta + types.length) % types.length];
+    renderDex();
+    const active = dexList.querySelector(".dex-list-button.active");
+    active?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    event.preventDefault();
   });
 
   document.addEventListener("click", closeEditorMenu);
