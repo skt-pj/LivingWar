@@ -711,7 +711,7 @@
     const ranked = [...axes].sort((a, b) => b.value - a.value);
     const top = ranked[0];
     const second = ranked[1];
-    const formed = top.value >= 15 || rooms.length > 0 || state.spawners.length > 0 || state.traps.length > 0;
+    const formed = top.value >= 15 || state.spawners.length > 0 || state.traps.length > 0;
     const hybrid = formed && second.value >= 35 && top.value - second.value <= 12;
 
     return {
