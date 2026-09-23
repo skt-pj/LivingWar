@@ -346,17 +346,20 @@
       ctx.fillStyle = GB_COLORS.lightMid;
       ctx.fillRect(px + 3, py + 3, 4, 2);
       ctx.fillRect(px + 1, py + 6, 4, 1);
-    } else {
-      ctx.fillStyle = (x + y) % 2 === 0 ? GB_COLORS.light : GB_COLORS.lightMid;
-      ctx.fillRect(px, py, TILE, TILE);
-      ctx.fillStyle = GB_COLORS.darkMid;
-      ctx.fillRect(px + 2, py + 2, 1, 1);
-      ctx.fillRect(px + 6, py + 5, 1, 1);
+
+      ctx.strokeStyle = GB_COLORS.dark;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(px + 0.5, py + 0.5, TILE - 1, TILE - 1);
+      return;
     }
 
-    ctx.strokeStyle = GB_COLORS.darkMid;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(px + 0.5, py + 0.5, TILE - 1, TILE - 1);
+    ctx.fillStyle = GB_COLORS.light;
+    ctx.fillRect(px, py, TILE, TILE);
+
+    // 床は形を読み取りやすくするため、暗い点模様を使わず弱い境界だけ残す。
+    ctx.fillStyle = GB_COLORS.lightMid;
+    ctx.fillRect(px + TILE - 1, py, 1, TILE);
+    ctx.fillRect(px, py + TILE - 1, TILE, 1);
   }
 
   function drawEntrance(point) {
@@ -795,7 +798,7 @@
       tiles: room.tiles.map((tile) => ({ ...tile })),
       bounds: { ...room.bounds },
       startedAt: performance.now(),
-      duration: 1000,
+      duration: 1300,
     });
   }
 
@@ -876,10 +879,14 @@
       const elapsed = now - effect.startedAt;
       if (elapsed < 0 || elapsed > effect.duration) continue;
 
+      // 高速反転は避け、約1.3秒の中で2回だけ輪郭を強調する。
+      const pulseVisible =
+        elapsed < 320 ||
+        (elapsed >= 650 && elapsed < 970);
+      if (!pulseVisible) continue;
+
       const tileSet = new Set(effect.tiles.map((tile) => roomTileKey(tile.x, tile.y)));
-      const flash = Math.floor(elapsed / 110) % 2 === 0;
-      ctx.fillStyle = flash ? GB_COLORS.light : GB_COLORS.dark;
-      ctx.strokeStyle = flash ? GB_COLORS.dark : GB_COLORS.light;
+      ctx.fillStyle = GB_COLORS.dark;
       ctx.lineWidth = 1;
 
       for (const tile of effect.tiles) {
@@ -895,7 +902,7 @@
       const centerX = Math.floor(((effect.bounds.minX + effect.bounds.maxX + 1) * TILE) / 2);
       const centerY = HUD_H + Math.floor(((effect.bounds.minY + effect.bounds.maxY + 1) * TILE) / 2) - 3;
       if (effect.bounds.maxX - effect.bounds.minX >= 3 && effect.bounds.maxY - effect.bounds.minY >= 1) {
-        pixelText("ROOM", centerX, centerY, 1, flash ? GB_COLORS.dark : GB_COLORS.light, "center");
+        pixelText("ROOM", centerX, centerY, 1, GB_COLORS.dark, "center");
       }
     }
   }
