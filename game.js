@@ -123,6 +123,16 @@
   const historyPanel = document.getElementById("historyPanel");
   const closeHistoryButton = document.getElementById("closeHistoryButton");
   const openDexButton = document.getElementById("openDexButton");
+  const openRatingButton = document.getElementById("openRatingButton");
+  const ratingPanel = document.getElementById("ratingPanel");
+  const closeRatingButton = document.getElementById("closeRatingButton");
+  const ratingType = document.getElementById("ratingType");
+  const ratingSummary = document.getElementById("ratingSummary");
+  const ratingAxes = document.getElementById("ratingAxes");
+  const ratingRooms = document.getElementById("ratingRooms");
+  const ratingRoute = document.getElementById("ratingRoute");
+  const ratingTraps = document.getElementById("ratingTraps");
+  const ratingArmy = document.getElementById("ratingArmy");
   const dexPanel = document.getElementById("dexPanel");
   const closeDexButton = document.getElementById("closeDexButton");
   const dexList = document.getElementById("dexList");
@@ -219,6 +229,7 @@
       roomDrag = null;
       closeEditorMenu();
       historyPanel.classList.add("hidden");
+      ratingPanel.classList.add("hidden");
       dexPanel.classList.add("hidden");
       startPanel.classList.remove("hidden");
       editorPanel.classList.add("hidden");
@@ -533,6 +544,234 @@
 
   function closeDexPanel() {
     dexPanel.classList.add("hidden");
+    menuButton.focus();
+  }
+
+
+  function clampRating(value) {
+    return Math.max(0, Math.min(100, Math.round(value)));
+  }
+
+  function shortestDungeonRoute() {
+    if (!state.entrance || !state.stairs) return [];
+
+    const startKey = roomTileKey(state.entrance.x, state.entrance.y);
+    const goalKey = roomTileKey(state.stairs.x, state.stairs.y);
+    const queue = [{ ...state.entrance }];
+    const visited = new Set([startKey]);
+    const previous = new Map();
+
+    for (let index = 0; index < queue.length; index++) {
+      const current = queue[index];
+      const currentKey = roomTileKey(current.x, current.y);
+      if (currentKey === goalKey) break;
+
+      for (const dir of DIRS) {
+        const nx = current.x + dir.x;
+        const ny = current.y + dir.y;
+        if (!isFloorTile(nx, ny)) continue;
+        const nextKey = roomTileKey(nx, ny);
+        if (visited.has(nextKey)) continue;
+        visited.add(nextKey);
+        previous.set(nextKey, currentKey);
+        queue.push({ x: nx, y: ny });
+      }
+    }
+
+    if (!visited.has(goalKey)) return [];
+
+    const route = [];
+    let cursor = goalKey;
+    while (cursor) {
+      const [x, y] = cursor.split(",").map(Number);
+      route.push({ x, y });
+      if (cursor === startKey) break;
+      cursor = previous.get(cursor);
+    }
+
+    return route.reverse();
+  }
+
+  function routeTurnCount(route) {
+    if (route.length < 3) return 0;
+    let turns = 0;
+    let previousDirection = null;
+
+    for (let index = 1; index < route.length; index++) {
+      const direction = {
+        x: route[index].x - route[index - 1].x,
+        y: route[index].y - route[index - 1].y,
+      };
+      if (
+        previousDirection &&
+        (direction.x !== previousDirection.x || direction.y !== previousDirection.y)
+      ) {
+        turns += 1;
+      }
+      previousDirection = direction;
+    }
+
+    return turns;
+  }
+
+  function dungeonArmyProfile(rooms) {
+    let totalCount = 0;
+    let mobileCount = 0;
+    let guardCount = 0;
+
+    for (const room of rooms) {
+      let remainingCapacity = ROOM_CAPACITY[room.sizeLabel] || 0;
+      const sources = state.spawners
+        .filter((source) => room.tileSet.has(roomTileKey(source.x, source.y)))
+        .map((source) => {
+          const sourceDef = SPAWNER_DEFS[source.type];
+          const monsterDef = MONSTER_DEFS[sourceDef?.monsterType];
+          return {
+            sourceDef,
+            monsterDef,
+            sizeCost: MONSTER_SIZE_COST[monsterDef?.size] || 1,
+          };
+        })
+        .filter((entry) => entry.sourceDef && entry.monsterDef)
+        .sort((a, b) => a.sizeCost - b.sizeCost);
+
+      for (const entry of sources) {
+        if (remainingCapacity <= 0) break;
+        const count = Math.min(
+          entry.sourceDef.activeLimit,
+          Math.floor(remainingCapacity / entry.sizeCost)
+        );
+        if (count <= 0) continue;
+
+        totalCount += count;
+        remainingCapacity -= count * entry.sizeCost;
+
+        if (entry.monsterDef.movement.territory !== "room_locked") {
+          mobileCount += count;
+        }
+        if (entry.monsterDef.movement.style === "guard") {
+          guardCount += count;
+        }
+      }
+    }
+
+    return { totalCount, mobileCount, guardCount };
+  }
+
+  function evaluateDungeon() {
+    const rooms = detectRooms();
+    const route = shortestDungeonRoute();
+    const routeLength = Math.max(0, route.length - 1);
+    const directLength = state.entrance && state.stairs
+      ? Math.abs(state.entrance.x - state.stairs.x) + Math.abs(state.entrance.y - state.stairs.y)
+      : 0;
+    const detour = Math.max(0, routeLength - directLength);
+    const turns = routeTurnCount(route);
+    const army = dungeonArmyProfile(rooms);
+    const uniqueSpawnerTypes = new Set(state.spawners.map((source) => source.type)).size;
+
+    const axes = [
+      {
+        key: "maze",
+        label: "迷宮",
+        type: "迷宮型",
+        value: clampRating(detour * 7 + turns * 7 + Math.max(0, rooms.length - 1) * 4),
+        summary: "侵入者を迷わせる構造そのものを武器にしている。",
+      },
+      {
+        key: "army",
+        label: "軍勢",
+        type: "軍勢型",
+        value: clampRating(army.totalCount * 9 + uniqueSpawnerTypes * 7),
+        summary: "出現源と部屋容量を使い、継続して魔物を抱える思想が強い。",
+      },
+      {
+        key: "fortress",
+        label: "要塞",
+        type: "要塞型",
+        value: clampRating(state.traps.length * 14 + army.guardCount * 12 + detour * 3),
+        summary: "罠と守備向きの魔物で、侵入者を止める思想が強い。",
+      },
+      {
+        key: "mobility",
+        label: "機動",
+        type: "遊撃型",
+        value: army.totalCount > 0 ? clampRating((army.mobileCount / army.totalCount) * 100) : 0,
+        summary: "部屋に閉じ込めず、動く魔物でダンジョン全体を使う思想が強い。",
+      },
+      {
+        key: "variety",
+        label: "多様性",
+        type: "混成型",
+        value: clampRating(uniqueSpawnerTypes * 25 + Math.min(rooms.length, 4) * 5 + (state.traps.length > 0 ? 10 : 0)),
+        summary: "一つの解法に寄せず、異なる仕組みを組み合わせる思想が強い。",
+      },
+    ];
+
+    const ranked = [...axes].sort((a, b) => b.value - a.value);
+    const top = ranked[0];
+    const second = ranked[1];
+    const formed = top.value >= 15 || rooms.length > 0 || state.spawners.length > 0 || state.traps.length > 0;
+    const hybrid = formed && second.value >= 35 && top.value - second.value <= 12;
+
+    return {
+      axes,
+      rooms: rooms.length,
+      routeLength,
+      traps: state.traps.length,
+      armyCount: army.totalCount,
+      type: !formed ? "未形成" : hybrid ? `${top.type} × ${second.type}` : top.type,
+      summary: !formed
+        ? "まだ思想が形になっていない。構造・出現源・罠の置き方で評価が変化する。"
+        : hybrid
+          ? `${top.label}と${second.label}が拮抗している。${top.summary}`
+          : top.summary,
+    };
+  }
+
+  function renderDungeonRating() {
+    const evaluation = evaluateDungeon();
+    ratingType.textContent = evaluation.type;
+    ratingSummary.textContent = evaluation.summary;
+    ratingRooms.textContent = String(evaluation.rooms);
+    ratingRoute.textContent = `${evaluation.routeLength}歩`;
+    ratingTraps.textContent = String(evaluation.traps);
+    ratingArmy.textContent = String(evaluation.armyCount);
+    ratingAxes.replaceChildren();
+
+    for (const axis of evaluation.axes) {
+      const row = document.createElement("div");
+      row.className = "rating-axis";
+
+      const label = document.createElement("span");
+      label.className = "rating-axis-label";
+      label.textContent = axis.label;
+
+      const track = document.createElement("span");
+      track.className = "rating-axis-track";
+      const fill = document.createElement("span");
+      fill.className = "rating-axis-fill";
+      fill.style.width = `${axis.value}%`;
+      track.appendChild(fill);
+
+      const value = document.createElement("strong");
+      value.className = "rating-axis-value";
+      value.textContent = String(axis.value);
+
+      row.append(label, track, value);
+      ratingAxes.appendChild(row);
+    }
+  }
+
+  function openRatingPanel() {
+    closeEditorMenu();
+    renderDungeonRating();
+    ratingPanel.classList.remove("hidden");
+    requestAnimationFrame(() => closeRatingButton.focus());
+  }
+
+  function closeRatingPanel() {
+    ratingPanel.classList.add("hidden");
     menuButton.focus();
   }
 
@@ -2251,6 +2490,8 @@
   closeHistoryButton.addEventListener("click", closeHistoryPanel);
   openDexButton.addEventListener("click", openDexPanel);
   closeDexButton.addEventListener("click", closeDexPanel);
+  openRatingButton.addEventListener("click", openRatingPanel);
+  closeRatingButton.addEventListener("click", closeRatingPanel);
 
   dexList.addEventListener("click", (event) => {
     const button = event.target.closest("[data-dex-type]");
@@ -2263,6 +2504,10 @@
 
   historyPanel.addEventListener("click", (event) => {
     if (event.target === historyPanel) closeHistoryPanel();
+  });
+
+  ratingPanel.addEventListener("click", (event) => {
+    if (event.target === ratingPanel) closeRatingPanel();
   });
 
   dexPanel.addEventListener("click", (event) => {
@@ -2284,6 +2529,10 @@
   document.addEventListener("click", closeEditorMenu);
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
+    if (!ratingPanel.classList.contains("hidden")) {
+      closeRatingPanel();
+      return;
+    }
     if (!dexPanel.classList.contains("hidden")) {
       closeDexPanel();
       return;
