@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <meta name="theme-color" content="#0b0d12" />
   <title>LivingWar - 魔王軍ダンジョン製作</title>
-  <link rel="stylesheet" href="styles.css?v=dex-ui18" />
+  <link rel="stylesheet" href="styles.css?v=dungeon-rating1" />
 </head>
 <body>
   <main class="app-shell">
@@ -83,6 +83,10 @@
             <button id="openDexButton" class="editor-menu-item" type="button">
               <span aria-hidden="true">◆</span>
               <span>モンスター図鑑</span>
+            </button>
+            <button id="openRatingButton" class="editor-menu-item" type="button">
+              <span aria-hidden="true">◇</span>
+              <span>ダンジョン評価</span>
             </button>
           </div>
         </div>
@@ -255,6 +259,39 @@
     </div>
   </section>
 
+
+  <section id="ratingPanel" class="rating-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="ratingTitle">
+    <div class="rating-dialog">
+      <div class="rating-dialog-head">
+        <div>
+          <span class="eyebrow">DUNGEON PROFILE</span>
+          <h2 id="ratingTitle">ダンジョン評価</h2>
+          <small>正解ではなく、このダンジョンが何者なのかを見る。</small>
+        </div>
+        <button id="closeRatingButton" class="icon-button" type="button" aria-label="ダンジョン評価を閉じる">×</button>
+      </div>
+
+      <div class="rating-body">
+        <section class="rating-identity">
+          <span>現在の型</span>
+          <strong id="ratingType">未形成</strong>
+          <p id="ratingSummary"></p>
+        </section>
+
+        <section class="rating-axes" id="ratingAxes" aria-label="ダンジョン評価軸"></section>
+
+        <section class="rating-facts">
+          <div><span>部屋</span><strong id="ratingRooms">0</strong></div>
+          <div><span>最短経路</span><strong id="ratingRoute">0</strong></div>
+          <div><span>罠</span><strong id="ratingTraps">0</strong></div>
+          <div><span>最大軍勢</span><strong id="ratingArmy">0</strong></div>
+        </section>
+
+        <p class="rating-note">評価は配置から自動算出される。総合点は持たず、どの思想へ尖らせるかを比較するための指標とする。</p>
+      </div>
+    </div>
+  </section>
+
   <section id="dexPanel" class="dex-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="dexTitle">
     <div class="dex-dialog">
       <div class="dex-dialog-head">
@@ -318,6 +355,6 @@
     </div>
   </section>
 
-  <script src="game.js?v=dex-ui18"></script>
+  <script src="game.js?v=dungeon-rating1"></script>
 </body>
 </html>
