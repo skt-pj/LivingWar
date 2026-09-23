@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <meta name="theme-color" content="#0b0d12" />
   <title>LivingWar - 魔王軍ダンジョン製作</title>
-  <link rel="stylesheet" href="styles.css?v=spawn-dex17" />
+  <link rel="stylesheet" href="styles.css?v=dex-ui18" />
 </head>
 <body>
   <main class="app-shell">
@@ -258,17 +258,66 @@
   <section id="dexPanel" class="dex-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="dexTitle">
     <div class="dex-dialog">
       <div class="dex-dialog-head">
-        <div>
-          <span class="eyebrow">MAOU MONSTER FILE</span>
-          <h2 id="dexTitle">モンスター図鑑</h2>
-          <small id="dexProgress">発見 0 / 0</small>
+        <div class="dex-title-lockup">
+          <span class="dex-led" aria-hidden="true"></span>
+          <div>
+            <span class="eyebrow">MAOU MONSTER FILE</span>
+            <h2 id="dexTitle">モンスター図鑑</h2>
+            <small id="dexProgress">発見 0 / 0</small>
+          </div>
         </div>
         <button id="closeDexButton" class="icon-button" type="button" aria-label="モンスター図鑑を閉じる">×</button>
       </div>
-      <div id="dexList" class="dex-list"></div>
+
+      <div class="dex-body">
+        <aside class="dex-index" aria-label="モンスター一覧">
+          <div class="dex-index-label">MONSTER INDEX</div>
+          <div id="dexList" class="dex-list"></div>
+        </aside>
+
+        <section class="dex-detail" id="dexDetail" aria-live="polite">
+          <div class="dex-detail-hero">
+            <div class="dex-screen">
+              <canvas id="dexSprite" width="64" height="64" aria-label="選択中モンスター"></canvas>
+              <div class="dex-screen-grid" aria-hidden="true"></div>
+            </div>
+            <div class="dex-identity">
+              <div id="dexDetailNumber" class="dex-detail-number">No.---</div>
+              <h3 id="dexDetailName">---</h3>
+              <div id="dexDetailTags" class="dex-detail-tags"></div>
+            </div>
+          </div>
+
+          <div id="dexLocked" class="dex-detail-locked hidden">
+            <strong>未発見</strong>
+            <p>現物を確認していない。部下の報告だけで図鑑を埋めるほど魔王は暇ではない。</p>
+          </div>
+
+          <div id="dexKnown" class="dex-detail-known">
+            <section class="dex-section">
+              <div class="dex-section-title">能力</div>
+              <div id="dexStats" class="dex-stats"></div>
+            </section>
+
+            <section class="dex-section dex-facts-section">
+              <div class="dex-section-title">生態・運用</div>
+              <dl class="dex-facts">
+                <div><dt>出現</dt><dd id="dexSpawn"></dd></div>
+                <div><dt>移動</dt><dd id="dexMovement"></dd></div>
+                <div><dt>Lv</dt><dd id="dexLevel"></dd></div>
+              </dl>
+            </section>
+
+            <section class="dex-comment-panel">
+              <div class="dex-comment-label">魔王評</div>
+              <p id="dexComment"></p>
+            </section>
+          </div>
+        </section>
+      </div>
     </div>
   </section>
 
-  <script src="game.js?v=spawn-dex17"></script>
+  <script src="game.js?v=dex-ui18"></script>
 </body>
 </html>
