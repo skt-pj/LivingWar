@@ -1146,6 +1146,7 @@ h1 {
 }
 
 .dex-stat-fill {
+  display: block;
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #c53b51, #ef7184);
