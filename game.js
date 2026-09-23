@@ -830,6 +830,7 @@
     }
 
     state.monsters = state.monsters.filter((monster) => !wallKeys.has(roomTileKey(monster.x, monster.y)));
+    state.spawners = state.spawners.filter((source) => !wallKeys.has(roomTileKey(source.x, source.y)));
     state.traps = state.traps.filter((trap) => !wallKeys.has(roomTileKey(trap.x, trap.y)));
 
     updateCounts();
@@ -1346,8 +1347,7 @@
       }
     } else if (selectedTool === "trap") {
       if (state.tiles[y][x] !== "floor") return;
-      state.spawners = state.spawners.filter((source) => !(source.x === x && source.y === y));
-      state.traps = state.traps.filter((t) => !(t.x === x && t.y === y));
+      removeMonsterAndTrapAt(x, y);
       state.traps.push({ x, y, type: "spike" });
     } else if (SPAWNER_DEFS[selectedTool]) {
       if (state.tiles[y][x] !== "floor") return;
