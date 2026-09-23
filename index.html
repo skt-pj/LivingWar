@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <meta name="theme-color" content="#0b0d12" />
   <title>LivingWar - 魔王軍ダンジョン製作</title>
-  <link rel="stylesheet" href="styles.css?v=roomdrag15" />
+  <link rel="stylesheet" href="styles.css?v=spawn-dex17" />
 </head>
 <body>
   <main class="app-shell">
@@ -80,6 +80,10 @@
               <span aria-hidden="true">≡</span>
               <span>履歴</span>
             </button>
+            <button id="openDexButton" class="editor-menu-item" type="button">
+              <span aria-hidden="true">◆</span>
+              <span>モンスター図鑑</span>
+            </button>
           </div>
         </div>
 
@@ -142,17 +146,21 @@
 
         <section class="tool-section">
           <div class="section-title">
-            <span>モンスター</span>
-            <small>MONSTER</small>
+            <span>出現アイテム</span>
+            <small>SPAWN ITEM</small>
           </div>
-          <div class="tool-grid two-column">
-            <button class="tool-button creature-tool" data-tool="slime" type="button">
-              <span class="tool-icon slime-icon" aria-hidden="true">●</span>
-              <span>スライム</span>
+          <div class="tool-grid spawn-grid">
+            <button class="tool-button creature-tool" data-tool="jellyBase" type="button">
+              <span class="tool-icon spawn-icon spawn-icon--base" aria-hidden="true">●</span>
+              <span>ゼリーの元</span>
             </button>
-            <button class="tool-button creature-tool" data-tool="goblin" type="button">
-              <span class="tool-icon goblin-icon" aria-hidden="true">◆</span>
-              <span>ゴブリン</span>
+            <button class="tool-button creature-tool" data-tool="redJelly" type="button">
+              <span class="tool-icon spawn-icon spawn-icon--red" aria-hidden="true">◉</span>
+              <span>赤いゼリーの元</span>
+            </button>
+            <button class="tool-button creature-tool" data-tool="hardJelly" type="button">
+              <span class="tool-icon spawn-icon spawn-icon--hard" aria-hidden="true">■</span>
+              <span>硬いゼリーの元</span>
             </button>
           </div>
         </section>
@@ -247,6 +255,20 @@
     </div>
   </section>
 
-  <script src="game.js?v=readable16"></script>
+  <section id="dexPanel" class="dex-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="dexTitle">
+    <div class="dex-dialog">
+      <div class="dex-dialog-head">
+        <div>
+          <span class="eyebrow">MAOU MONSTER FILE</span>
+          <h2 id="dexTitle">モンスター図鑑</h2>
+          <small id="dexProgress">発見 0 / 0</small>
+        </div>
+        <button id="closeDexButton" class="icon-button" type="button" aria-label="モンスター図鑑を閉じる">×</button>
+      </div>
+      <div id="dexList" class="dex-list"></div>
+    </div>
+  </section>
+
+  <script src="game.js?v=spawn-dex17"></script>
 </body>
 </html>
