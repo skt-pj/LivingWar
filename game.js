@@ -22,33 +22,88 @@
   const DRAG_THRESHOLD = 7;
   const DOUBLE_TAP_MS = 300;
   const TOUCH_PLACEMENT_OFFSET_PX = 54;
+  const DEX_DISCOVERY_KEY = "livingwar:dex:v1";
+  const MONSTER_SIZE_COST = Object.freeze({ S: 1, M: 2, L: 4, XL: 8 });
+  const ROOM_CAPACITY = Object.freeze({ "小部屋": 4, "中部屋": 8, "大部屋": 12 });
 
   const MONSTER_DEFS = {
     slime: {
+      dexNo: 1,
       name: "スライム",
-      level: 1,
-      drop: "未設定",
-      evolution: "未設定",
-      logic: "時計回り優先で移動。進めなければ向きを変える。",
+      family: "ゼリー系",
+      size: "S",
+      levelRange: [1, 2],
+      stats: { hp: 12, attack: 4, defense: 2, speed: 5 },
+      movement: { style: "wander", territory: "room_locked", moveEvery: 1 },
+      dexText: "最下級。数だけは立派だ。部屋から出る度胸もないが、足止めくらいにはなる。",
+    },
+    redSlime: {
+      dexNo: 2,
+      name: "赤スライム",
+      family: "ゼリー系",
+      size: "S",
+      levelRange: [3, 5],
+      stats: { hp: 15, attack: 8, defense: 3, speed: 7 },
+      movement: { style: "chase", territory: "room_preferred", moveEvery: 1 },
+      dexText: "少し赤くなっただけで強者気取りだ。とはいえ追いかける根性はある。逃げる勇者には便利。",
+    },
+    hardSlime: {
+      dexNo: 3,
+      name: "ハードスライム",
+      family: "ゼリー系",
+      size: "M",
+      levelRange: [4, 6],
+      stats: { hp: 26, attack: 5, defense: 12, speed: 2 },
+      movement: { style: "guard", territory: "room_locked", moveEvery: 2 },
+      dexText: "硬い。遅い。以上だ。入口に居座らせれば役には立つが、追撃を期待するだけ無駄である。",
     },
     goblin: {
+      dexNo: 90,
       name: "ゴブリン",
-      level: 1,
-      drop: "未設定",
-      evolution: "未設定",
-      logic: "直進優先。壁に当たると右折し、右も塞がれば左折する。",
+      family: "ゴブリン系",
+      size: "M",
+      levelRange: [1, 1],
+      stats: { hp: 18, attack: 6, defense: 4, speed: 5 },
+      movement: { style: "patrol", territory: "free_roam", moveEvery: 1 },
+      dexText: "旧配置個体。命令を聞くふりだけは上手い。",
+      legacy: true,
+    },
+  };
+
+  const SPAWNER_DEFS = {
+    jellyBase: {
+      name: "ゼリーの元",
+      monsterType: "slime",
+      batchSize: 2,
+      activeLimit: 6,
+      intervalMs: 3600,
+    },
+    redJelly: {
+      name: "赤いゼリーの元",
+      monsterType: "redSlime",
+      batchSize: 2,
+      activeLimit: 5,
+      intervalMs: 4400,
+    },
+    hardJelly: {
+      name: "硬いゼリーの元",
+      monsterType: "hardSlime",
+      batchSize: 1,
+      activeLimit: 3,
+      intervalMs: 5600,
     },
   };
 
   const TOOL_INFO = {
     room: "部屋\nドラッグで範囲を指定します。外周は壁、内部は床になり、出入口を1マス自動で作ります。",
     floor: "床\n歩行可能なマスです。",
-    wall: "壁\n移動不可。入口から出口（階段）への通路を塞ぐ配置はできません。モンスター・罠は通路判定に含みません。",
-    erase: "消去\nモンスター・罠・設備を消し、床に戻します。",
+    wall: "壁\n移動不可。入口から出口（階段）への通路を塞ぐ配置はできません。",
+    erase: "消去\nモンスター・罠・出現アイテムを消し、床に戻します。",
     entrance: "入口\n勇者が1Fへ侵入する開始地点です。1Fに1か所だけ置けます。",
     stairs: "次の階段\n次の階へ進む地点です。1Fに1か所だけ置けます。",
-    slime: `スライム\nLv ${MONSTER_DEFS.slime.level}\nドロップ: ${MONSTER_DEFS.slime.drop}\n進化条件: ${MONSTER_DEFS.slime.evolution}\n行動: ${MONSTER_DEFS.slime.logic}`,
-    goblin: `ゴブリン\nLv ${MONSTER_DEFS.goblin.level}\nドロップ: ${MONSTER_DEFS.goblin.drop}\n進化条件: ${MONSTER_DEFS.goblin.evolution}\n行動: ${MONSTER_DEFS.goblin.logic}`,
+    jellyBase: "ゼリーの元\n部屋内でスライムを発生。サイズS。1回2体、同時生存6体まで。部屋からは出ません。",
+    redJelly: "赤いゼリーの元\n部屋内で赤スライムを発生。サイズS。1回2体、同時生存5体まで。部屋を中心に動き、外へ出ることがあります。",
+    hardJelly: "硬いゼリーの元\n部屋内でハードスライムを発生。サイズM。1回1体、同時生存3体まで。部屋から出ません。",
     trap: "トゲ罠\n床に設置できます。勇者への効果は勇者側実装時に接続します。",
   };
 
@@ -67,6 +122,11 @@
   const openHistoryButton = document.getElementById("openHistoryButton");
   const historyPanel = document.getElementById("historyPanel");
   const closeHistoryButton = document.getElementById("closeHistoryButton");
+  const openDexButton = document.getElementById("openDexButton");
+  const dexPanel = document.getElementById("dexPanel");
+  const closeDexButton = document.getElementById("closeDexButton");
+  const dexList = document.getElementById("dexList");
+  const dexProgress = document.getElementById("dexProgress");
   const simulateButton = document.getElementById("simulateButton");
   const resetButton = document.getElementById("resetButton");
   const saveButton = document.getElementById("saveButton");
@@ -89,6 +149,7 @@
   let simulation = false;
   let lastStepAt = 0;
   let nextMonsterId = 1;
+  let nextSpawnerId = 1;
   let suppressClickUntil = 0;
 
   const view = {
@@ -111,10 +172,12 @@
   let lastMessageText = "";
   let lastMessageAt = 0;
   let savePanelMode = "save";
+  const discoveredMonsters = new Set();
 
   const state = {
     tiles: [],
     monsters: [],
+    spawners: [],
     traps: [],
     entrance: null,
     stairs: null,
@@ -128,10 +191,12 @@
       })
     );
     state.monsters = [];
+    state.spawners = [];
     state.traps = [];
     state.entrance = { x: 1, y: 1 };
     state.stairs = { x: COLS - 2, y: ROWS - 2 };
     nextMonsterId = 1;
+    nextSpawnerId = 1;
     updateCounts();
   }
 
@@ -142,6 +207,7 @@
       roomDrag = null;
       closeEditorMenu();
       historyPanel.classList.add("hidden");
+      dexPanel.classList.add("hidden");
       startPanel.classList.remove("hidden");
       editorPanel.classList.add("hidden");
       zoomResetButton.classList.add("hidden");
@@ -242,6 +308,102 @@
     menuButton.focus();
   }
 
+  function loadDexDiscovery() {
+    discoveredMonsters.clear();
+    try {
+      const stored = JSON.parse(localStorage.getItem(DEX_DISCOVERY_KEY) || "[]");
+      if (Array.isArray(stored)) {
+        stored.forEach((type) => {
+          if (MONSTER_DEFS[type] && !MONSTER_DEFS[type].legacy) discoveredMonsters.add(type);
+        });
+      }
+    } catch {
+      // 図鑑データが壊れている場合は未発見から始める。
+    }
+  }
+
+  function discoverMonster(type) {
+    const def = MONSTER_DEFS[type];
+    if (!def || def.legacy || discoveredMonsters.has(type)) return;
+    discoveredMonsters.add(type);
+    try {
+      localStorage.setItem(DEX_DISCOVERY_KEY, JSON.stringify([...discoveredMonsters]));
+    } catch {
+      // 図鑑解放自体はゲーム進行を止めない。
+    }
+    renderDex();
+    addMessage(`図鑑に「${def.name}」が登録されました。`, "info", true);
+  }
+
+  function movementText(def) {
+    const territory = {
+      room_locked: "部屋から出ない",
+      room_preferred: "部屋中心・外出可",
+      free_roam: "自由移動",
+    }[def.movement.territory] || "不明";
+    const style = {
+      wander: "徘徊",
+      chase: "追跡型",
+      guard: "警備型",
+      patrol: "巡回",
+    }[def.movement.style] || def.movement.style;
+    return `${style} / ${territory}`;
+  }
+
+  function spawnerForMonster(type) {
+    return Object.values(SPAWNER_DEFS).find((def) => def.monsterType === type) || null;
+  }
+
+  function renderDex() {
+    if (!dexList || !dexProgress) return;
+    const types = Object.keys(MONSTER_DEFS).filter((type) => !MONSTER_DEFS[type].legacy);
+    dexProgress.textContent = `発見 ${types.filter((type) => discoveredMonsters.has(type)).length} / ${types.length}`;
+
+    dexList.replaceChildren();
+    for (const type of types) {
+      const def = MONSTER_DEFS[type];
+      const discovered = discoveredMonsters.has(type);
+      const entry = document.createElement("article");
+      entry.className = `dex-entry${discovered ? "" : " dex-entry--locked"}`;
+
+      const side = document.createElement("div");
+      side.innerHTML = `<div class="dex-number">No.${String(def.dexNo).padStart(3, "0")}</div><div class="dex-name">${discovered ? def.name : "???"}</div><div class="dex-family">${discovered ? `${def.family} / SIZE ${def.size}` : "未発見"}</div>`;
+
+      const body = document.createElement("div");
+      if (!discovered) {
+        body.innerHTML = '<div class="dex-locked-copy">まだ実物を確認していない。魔王軍のくせに報告が遅い。</div>';
+      } else {
+        const source = spawnerForMonster(type);
+        const spawnText = source ? `${source.name} / 1回${source.batchSize}体 / 同時${source.activeLimit}体` : "出現源不明";
+        body.innerHTML = `
+          <div class="dex-stats">
+            <div class="dex-stat"><span>HP</span><strong>${def.stats.hp}</strong></div>
+            <div class="dex-stat"><span>ATK</span><strong>${def.stats.attack}</strong></div>
+            <div class="dex-stat"><span>DEF</span><strong>${def.stats.defense}</strong></div>
+            <div class="dex-stat"><span>SPD</span><strong>${def.stats.speed}</strong></div>
+          </div>
+          <div class="dex-meta">Lv ${def.levelRange[0]}〜${def.levelRange[1]}<br>出現：${spawnText}<br>移動：${movementText(def)}</div>
+          <div class="dex-comment">${def.dexText}</div>
+        `;
+      }
+
+      entry.append(side, body);
+      dexList.appendChild(entry);
+    }
+  }
+
+  function openDexPanel() {
+    closeEditorMenu();
+    renderDex();
+    dexPanel.classList.remove("hidden");
+    requestAnimationFrame(() => closeDexButton.focus());
+  }
+
+  function closeDexPanel() {
+    dexPanel.classList.add("hidden");
+    menuButton.focus();
+  }
+
   function updateSimulationButton() {
     simulateButton.textContent = simulation ? "徘徊テスト停止" : "徘徊テスト開始";
     simState.textContent = simulation ? "稼働" : "停止";
@@ -319,6 +481,7 @@
 
     if (state.entrance) drawEntrance(state.entrance);
     if (state.stairs) drawStairs(state.stairs);
+    state.spawners.forEach(drawSpawner);
     state.traps.forEach(drawTrap);
     state.monsters.forEach(drawMonster);
     drawPlacementPreview();
@@ -399,7 +562,9 @@
     const px = monster.x * TILE;
     const py = HUD_H + monster.y * TILE;
     if (monster.type === "slime") drawSlime(px, py);
-    if (monster.type === "goblin") drawGoblin(px, py);
+    else if (monster.type === "redSlime") drawRedSlime(px, py);
+    else if (monster.type === "hardSlime") drawHardSlime(px, py);
+    else if (monster.type === "goblin") drawGoblin(px, py);
   }
 
   function drawSlime(px, py) {
@@ -411,6 +576,24 @@
     ctx.fillRect(px + 5, py + 5, 1, 1);
   }
 
+  function drawRedSlime(px, py) {
+    drawSlime(px, py);
+    ctx.fillStyle = GB_COLORS.lightMid;
+    ctx.fillRect(px + 3, py + 3, 2, 1);
+    ctx.fillStyle = GB_COLORS.dark;
+    ctx.fillRect(px + 3, py + 6, 2, 1);
+  }
+
+  function drawHardSlime(px, py) {
+    ctx.fillStyle = GB_COLORS.dark;
+    ctx.fillRect(px + 1, py + 2, 6, 5);
+    ctx.fillStyle = GB_COLORS.darkMid;
+    ctx.fillRect(px + 2, py + 1, 4, 1);
+    ctx.fillStyle = GB_COLORS.light;
+    ctx.fillRect(px + 2, py + 4, 1, 1);
+    ctx.fillRect(px + 5, py + 4, 1, 1);
+  }
+
   function drawGoblin(px, py) {
     ctx.fillStyle = GB_COLORS.dark;
     ctx.fillRect(px + 2, py + 1, 4, 1);
@@ -420,6 +603,31 @@
     ctx.fillRect(px + 5, py + 3, 1, 1);
     ctx.fillStyle = GB_COLORS.lightMid;
     ctx.fillRect(px + 3, py + 5, 2, 1);
+  }
+
+  function drawSpawner(spawner) {
+    const px = spawner.x * TILE;
+    const py = HUD_H + spawner.y * TILE;
+
+    ctx.fillStyle = GB_COLORS.darkMid;
+    ctx.fillRect(px + 2, py + 2, 4, 5);
+    ctx.fillStyle = GB_COLORS.dark;
+    ctx.fillRect(px + 3, py + 1, 2, 1);
+    ctx.fillRect(px + 1, py + 5, 6, 2);
+
+    if (spawner.type === "redJelly") {
+      ctx.fillStyle = GB_COLORS.light;
+      ctx.fillRect(px + 3, py + 3, 2, 2);
+      ctx.fillStyle = GB_COLORS.dark;
+      ctx.fillRect(px + 4, py + 2, 1, 1);
+    } else if (spawner.type === "hardJelly") {
+      ctx.fillStyle = GB_COLORS.dark;
+      ctx.fillRect(px + 2, py + 2, 4, 1);
+      ctx.fillRect(px + 2, py + 4, 4, 1);
+    } else {
+      ctx.fillStyle = GB_COLORS.light;
+      ctx.fillRect(px + 3, py + 3, 2, 2);
+    }
   }
 
   function drawPlacementPreview() {
@@ -449,10 +657,8 @@
       drawStairs({ x, y });
     } else if (selectedTool === "trap") {
       drawTrap({ x, y, type: "spike" });
-    } else if (selectedTool === "slime") {
-      drawSlime(px, py);
-    } else if (selectedTool === "goblin") {
-      drawGoblin(px, py);
+    } else if (SPAWNER_DEFS[selectedTool]) {
+      drawSpawner({ x, y, type: selectedTool });
     }
 
     ctx.strokeStyle = GB_COLORS.dark;
@@ -631,7 +837,9 @@
     drawDungeon();
 
     const innerArea = (rect.width - 2) * (rect.height - 2);
-    screenHelp.textContent = `${roomSizeLabel(innerArea)}を作りました。床 ${innerArea}マス。`;
+    const sizeLabel = roomSizeLabel(innerArea);
+    const capacity = ROOM_CAPACITY[sizeLabel] || 0;
+    screenHelp.textContent = `${sizeLabel}を作りました。床 ${innerArea}マス / 容量 ${capacity}。`;
     return true;
   }
 
@@ -909,6 +1117,7 @@
 
   function removeMonsterAndTrapAt(x, y) {
     state.monsters = state.monsters.filter((m) => !(m.x === x && m.y === y));
+    state.spawners = state.spawners.filter((source) => !(source.x === x && source.y === y));
     state.traps = state.traps.filter((t) => !(t.x === x && t.y === y));
   }
 
@@ -916,10 +1125,14 @@
     if (simulation) return false;
 
     const monsterBefore = state.monsters.length;
+    const spawnerBefore = state.spawners.length;
     const trapBefore = state.traps.length;
     removeMonsterAndTrapAt(x, y);
 
-    let removed = state.monsters.length !== monsterBefore || state.traps.length !== trapBefore;
+    let removed =
+      state.monsters.length !== monsterBefore ||
+      state.spawners.length !== spawnerBefore ||
+      state.traps.length !== trapBefore;
 
     if (state.tiles[y][x] === "wall" && !samePoint(state.entrance, x, y) && !samePoint(state.stairs, x, y)) {
       state.tiles[y][x] = "floor";
@@ -1133,19 +1346,27 @@
       }
     } else if (selectedTool === "trap") {
       if (state.tiles[y][x] !== "floor") return;
+      state.spawners = state.spawners.filter((source) => !(source.x === x && source.y === y));
       state.traps = state.traps.filter((t) => !(t.x === x && t.y === y));
       state.traps.push({ x, y, type: "spike" });
-    } else if (selectedTool === "slime" || selectedTool === "goblin") {
+    } else if (SPAWNER_DEFS[selectedTool]) {
       if (state.tiles[y][x] !== "floor") return;
-      state.monsters = state.monsters.filter((m) => !(m.x === x && m.y === y));
-      state.monsters.push({
-        id: nextMonsterId++,
+      const room = roomForTile(x, y);
+      if (!room) {
+        screenHelp.textContent = "出現アイテムは部屋の中に置いてください。";
+        addMessage("出現アイテムは部屋の中でのみ機能します。", "warning", true);
+        return;
+      }
+      removeMonsterAndTrapAt(x, y);
+      state.spawners.push({
+        id: nextSpawnerId++,
         type: selectedTool,
         x,
         y,
-        dir: selectedTool === "slime" ? 1 : 2,
-        steps: 0,
+        lastSpawnAt: 0,
       });
+      const capacity = ROOM_CAPACITY[room.sizeLabel] || 0;
+      screenHelp.textContent = `${SPAWNER_DEFS[selectedTool].name}を設置。部屋容量 ${capacity}。`;
     }
 
     enforceValidDungeonRoute();
@@ -1154,46 +1375,197 @@
     drawDungeon();
   }
 
-  function canMoveTo(monster, x, y, occupied) {
+  function roomForTile(x, y, rooms = detectRooms()) {
+    const key = roomTileKey(x, y);
+    return rooms.find((room) => room.tileSet.has(key)) || null;
+  }
+
+  function spawnerById(id) {
+    return state.spawners.find((source) => source.id === id) || null;
+  }
+
+  function homeRoomForMonster(monster, rooms) {
+    const source = spawnerById(monster.sourceId);
+    if (source) return roomForTile(source.x, source.y, rooms);
+    return roomForTile(monster.x, monster.y, rooms);
+  }
+
+  function monsterSizeCost(monster) {
+    const def = MONSTER_DEFS[monster.type];
+    return MONSTER_SIZE_COST[def?.size] || 1;
+  }
+
+  function roomCapacityUsed(room) {
+    const sourceIds = new Set(
+      state.spawners
+        .filter((source) => room.tileSet.has(roomTileKey(source.x, source.y)))
+        .map((source) => source.id)
+    );
+
+    return state.monsters.reduce((total, monster) => {
+      if (monster.sourceId && sourceIds.has(monster.sourceId)) {
+        return total + monsterSizeCost(monster);
+      }
+      if (!monster.sourceId && room.tileSet.has(roomTileKey(monster.x, monster.y))) {
+        return total + monsterSizeCost(monster);
+      }
+      return total;
+    }, 0);
+  }
+
+  function randomLevel([min, max]) {
+    return min + Math.floor(Math.random() * (max - min + 1));
+  }
+
+  function spawnCandidates(room, source, occupied) {
+    const blockedBySource = new Set(state.spawners.map((item) => roomTileKey(item.x, item.y)));
+    return room.tiles
+      .filter((tile) => {
+        const key = roomTileKey(tile.x, tile.y);
+        return (
+          !occupied.has(key) &&
+          !blockedBySource.has(key) &&
+          !samePoint(state.entrance, tile.x, tile.y) &&
+          !samePoint(state.stairs, tile.x, tile.y)
+        );
+      })
+      .sort((a, b) =>
+        (Math.abs(a.x - source.x) + Math.abs(a.y - source.y)) -
+        (Math.abs(b.x - source.x) + Math.abs(b.y - source.y))
+      );
+  }
+
+  function spawnFromSource(source, now, rooms, occupied) {
+    const sourceDef = SPAWNER_DEFS[source.type];
+    if (!sourceDef) return false;
+    if (source.lastSpawnAt && now - source.lastSpawnAt < sourceDef.intervalMs) return false;
+
+    const room = roomForTile(source.x, source.y, rooms);
+    if (!room) return false;
+
+    const monsterDef = MONSTER_DEFS[sourceDef.monsterType];
+    if (!monsterDef) return false;
+
+    const activeFromSource = state.monsters.filter((monster) => monster.sourceId === source.id).length;
+    const sourceRemaining = sourceDef.activeLimit - activeFromSource;
+    const roomCapacity = ROOM_CAPACITY[room.sizeLabel] || 0;
+    const capacityRemaining = Math.max(0, roomCapacity - roomCapacityUsed(room));
+    const maxByCapacity = Math.floor(capacityRemaining / (MONSTER_SIZE_COST[monsterDef.size] || 1));
+    const candidates = spawnCandidates(room, source, occupied);
+    const count = Math.min(sourceDef.batchSize, sourceRemaining, maxByCapacity, candidates.length);
+
+    if (count <= 0) return false;
+
+    for (let i = 0; i < count; i++) {
+      const tile = candidates[i];
+      const monster = {
+        id: nextMonsterId++,
+        type: sourceDef.monsterType,
+        level: randomLevel(monsterDef.levelRange),
+        x: tile.x,
+        y: tile.y,
+        dir: (source.id + i) % 4,
+        steps: 0,
+        moveClock: 0,
+        sourceId: source.id,
+      };
+      state.monsters.push(monster);
+      occupied.add(roomTileKey(tile.x, tile.y));
+      discoverMonster(monster.type);
+    }
+
+    source.lastSpawnAt = now;
+    updateCounts();
+    addMessage(`${sourceDef.name}から${monsterDef.name}が${count}体出現しました。`, "info", true);
+    return true;
+  }
+
+  function processSpawns(now) {
+    const rooms = detectRooms();
+    const occupied = new Set(state.monsters.map((monster) => roomTileKey(monster.x, monster.y)));
+    let spawned = false;
+    for (const source of state.spawners) {
+      if (spawnFromSource(source, now, rooms, occupied)) spawned = true;
+    }
+    return spawned;
+  }
+
+  function canMoveTo(monster, x, y, occupied, homeRoom) {
     if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return false;
     if (state.tiles[y][x] !== "floor") return false;
-    const key = `${x},${y}`;
+    if (state.spawners.some((source) => source.x === x && source.y === y)) return false;
+
+    const def = MONSTER_DEFS[monster.type] || MONSTER_DEFS.slime;
+    const key = roomTileKey(x, y);
+    if (def.movement.territory === "room_locked" && homeRoom && !homeRoom.tileSet.has(key)) return false;
+
     return !occupied.has(key) || (monster.x === x && monster.y === y);
   }
 
-  function moveMonster(monster, occupied) {
-    occupied.delete(`${monster.x},${monster.y}`);
+  function moveMonster(monster, occupied, rooms) {
+    occupied.delete(roomTileKey(monster.x, monster.y));
 
-    const tryDirs = monster.type === "slime"
-      ? [monster.dir, (monster.dir + 1) % 4, (monster.dir + 2) % 4, (monster.dir + 3) % 4]
-      : [monster.dir, (monster.dir + 1) % 4, (monster.dir + 3) % 4, (monster.dir + 2) % 4];
+    const def = MONSTER_DEFS[monster.type] || MONSTER_DEFS.slime;
+    monster.moveClock = (monster.moveClock || 0) + 1;
+    if (monster.moveClock % (def.movement.moveEvery || 1) !== 0) {
+      occupied.add(roomTileKey(monster.x, monster.y));
+      return;
+    }
+
+    const homeRoom = homeRoomForMonster(monster, rooms);
+    const source = spawnerById(monster.sourceId);
+    let tryDirs = [monster.dir, (monster.dir + 1) % 4, (monster.dir + 3) % 4, (monster.dir + 2) % 4];
+
+    if (def.movement.territory === "room_preferred" && homeRoom) {
+      const currentlyInside = homeRoom.tileSet.has(roomTileKey(monster.x, monster.y));
+      if (currentlyInside && monster.moveClock % 4 !== 0) {
+        const insideDirs = tryDirs.filter((dir) => {
+          const nx = monster.x + DIRS[dir].x;
+          const ny = monster.y + DIRS[dir].y;
+          return homeRoom.tileSet.has(roomTileKey(nx, ny));
+        });
+        if (insideDirs.length > 0) tryDirs = insideDirs;
+      } else if (!currentlyInside && source) {
+        tryDirs.sort((a, b) => {
+          const ax = monster.x + DIRS[a].x;
+          const ay = monster.y + DIRS[a].y;
+          const bx = monster.x + DIRS[b].x;
+          const by = monster.y + DIRS[b].y;
+          return (Math.abs(ax - source.x) + Math.abs(ay - source.y)) -
+            (Math.abs(bx - source.x) + Math.abs(by - source.y));
+        });
+      }
+    }
 
     for (const dir of tryDirs) {
       const nx = monster.x + DIRS[dir].x;
       const ny = monster.y + DIRS[dir].y;
-      if (!canMoveTo(monster, nx, ny, occupied)) continue;
+      if (!canMoveTo(monster, nx, ny, occupied, homeRoom)) continue;
       monster.x = nx;
       monster.y = ny;
       monster.dir = dir;
-      monster.steps += 1;
+      monster.steps = (monster.steps || 0) + 1;
       break;
     }
 
-    occupied.add(`${monster.x},${monster.y}`);
+    occupied.add(roomTileKey(monster.x, monster.y));
   }
 
-  function simulateStep() {
-    const occupied = new Set(state.monsters.map((m) => `${m.x},${m.y}`));
+  function simulateStep(now) {
+    const spawned = processSpawns(now);
+    const rooms = detectRooms();
+    const occupied = new Set(state.monsters.map((monster) => roomTileKey(monster.x, monster.y)));
     [...state.monsters]
       .sort((a, b) => a.id - b.id)
-      .forEach((monster) => moveMonster(monster, occupied));
+      .forEach((monster) => moveMonster(monster, occupied, rooms));
+    return spawned;
   }
 
   function loop(now) {
     let redraw = false;
 
     if (mode === "editor" && simulation && now - lastStepAt >= 420) {
-      simulateStep();
+      simulateStep(now);
       lastStepAt = now;
       redraw = true;
     }
@@ -1242,10 +1614,12 @@
       rows: ROWS,
       tiles: state.tiles,
       monsters: state.monsters,
+      spawners: state.spawners.map((source) => ({ ...source, lastSpawnAt: 0 })),
       traps: state.traps,
       entrance: state.entrance,
       stairs: state.stairs,
       nextMonsterId,
+      nextSpawnerId,
       roomCount: detectRooms().length,
     };
   }
@@ -1333,11 +1707,16 @@
     if (!isValidDungeonData(data)) throw new Error("invalid dungeon");
 
     state.tiles = data.tiles.map((row) => [...row]);
-    state.monsters = Array.isArray(data.monsters) ? data.monsters.map((monster) => ({ ...monster })) : [];
+    state.monsters = Array.isArray(data.monsters) ? data.monsters.map((monster) => ({ moveClock: 0, ...monster })) : [];
+    state.spawners = Array.isArray(data.spawners)
+      ? data.spawners.map((source) => ({ ...source, lastSpawnAt: 0 }))
+      : [];
     state.traps = Array.isArray(data.traps) ? data.traps.map((trap) => ({ ...trap })) : [];
     state.entrance = data.entrance ? { ...data.entrance } : null;
     state.stairs = data.stairs ? { ...data.stairs } : null;
     nextMonsterId = Number.isInteger(data.nextMonsterId) ? data.nextMonsterId : state.monsters.length + 1;
+    nextSpawnerId = Number.isInteger(data.nextSpawnerId) ? data.nextSpawnerId : state.spawners.length + 1;
+    state.monsters.forEach((monster) => discoverMonster(monster.type));
 
     if (!hasEntranceToExitPath()) {
       repairEntranceToExitPath();
@@ -1738,14 +2117,24 @@
 
   openHistoryButton.addEventListener("click", openHistoryPanel);
   closeHistoryButton.addEventListener("click", closeHistoryPanel);
+  openDexButton.addEventListener("click", openDexPanel);
+  closeDexButton.addEventListener("click", closeDexPanel);
 
   historyPanel.addEventListener("click", (event) => {
     if (event.target === historyPanel) closeHistoryPanel();
   });
 
+  dexPanel.addEventListener("click", (event) => {
+    if (event.target === dexPanel) closeDexPanel();
+  });
+
   document.addEventListener("click", closeEditorMenu);
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
+    if (!dexPanel.classList.contains("hidden")) {
+      closeDexPanel();
+      return;
+    }
     if (!historyPanel.classList.contains("hidden")) {
       closeHistoryPanel();
       return;
@@ -1818,7 +2207,7 @@
     lastStepAt = performance.now();
     updateSimulationButton();
     screenHelp.textContent = simulation
-      ? "モンスターが暫定ロジックで徘徊中。"
+      ? "出現アイテムが起動。部屋容量とサイズに応じてモンスターが発生・移動します。"
       : "徘徊テストを停止しました。";
     addMessage(simulation ? "徘徊テストを開始しました。" : "徘徊テストを停止しました。", "info");
   });
@@ -1867,6 +2256,8 @@
 
   makeInitialDungeon();
   migrateLegacySave();
+  loadDexDiscovery();
+  renderDex();
   renderSaveSlots();
   setTool("floor");
   setMode("start");
